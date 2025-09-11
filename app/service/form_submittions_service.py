@@ -336,7 +336,6 @@ class FormSubmissions:
             rows = cursor.fetchall()
 
         submissions = []
-        # print("rows",rows[0])
         for row in rows:
             submission_id, form_id, submitted_by_name, submitted_at, flagged, task_id,task_name,form_title = row
             submissions.append({
