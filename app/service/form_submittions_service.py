@@ -234,7 +234,7 @@ class FormSubmissions:
             # fetch field values
             cursor.execute(
                 """
-                SELECT fsv.field_id, ff.name AS field_name, fsv.value_text
+                SELECT fsv.field_id, ff.name AS field_name, fsv.value_text ,ff.field_type
                 FROM form_field_values fsv
                 JOIN form_fields ff ON fsv.field_id = ff.field_id
                 WHERE fsv.submission_id = %s
@@ -244,7 +244,7 @@ class FormSubmissions:
             field_rows = cursor.fetchall()
 
             field_values = []
-            for field_id, field_name, value_text in field_rows:
+            for field_id, field_name, value_text,field_type in field_rows:
                 parsed_value = value_text
                 try:
                     parsed_value = json.loads(value_text)  # if JSON stored
@@ -253,6 +253,7 @@ class FormSubmissions:
                 field_values.append({
                     "field_id": field_id,
                     "field_name": field_name,
+                    "field_type": field_type,
                     "value": parsed_value
                 })
 

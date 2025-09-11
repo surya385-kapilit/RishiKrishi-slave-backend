@@ -46,6 +46,7 @@ class FlagRequest(BaseModel):
 class FieldValueResponse(BaseModel):
     field_id: UUID
     field_name: str
+    field_type: str
     value: Any 
 
 
