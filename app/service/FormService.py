@@ -347,7 +347,7 @@ class FormService:
             # Fetch forms for the task
             cursor.execute(
                 """
-                SELECT f.form_id, f.task_id, f.title 
+                SELECT f.form_id, f.task_id, f.title ,is_active
                 FROM form f
                 JOIN users u ON f.created_by = u.user_id
                 WHERE f.task_id = %s
@@ -360,7 +360,9 @@ class FormService:
         form_list = [
             {
                 "form_id": str(f[0]),
-                "title": f[2]
+                "title": f[2],
+                "is_active": f[3],
+
             }
             for f in forms
         ]

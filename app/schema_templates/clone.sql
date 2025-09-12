@@ -1,3 +1,10 @@
+
+-- set this for the new schema
+-- ALTER TABLE public.--table_nmae--
+-- ALTER COLUMN created_at SET DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata');
+
+
+
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     user_id UUID NOT NULL DEFAULT gen_random_uuid(),

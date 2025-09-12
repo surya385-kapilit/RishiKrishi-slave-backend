@@ -53,6 +53,7 @@ class GetAllFormsResponse(BaseModel):
 class FormsListResponse(BaseModel):
     form_id: UUID
     title: str
+    is_active: bool
 
 
 class CreateFormResponse(BaseModel):

@@ -145,8 +145,7 @@ async def update_form(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@form_submissions_router.get("/get-form-data/{submission_id}", response_model=List[FormBySubmissionResponse]
-)
+@form_submissions_router.get("/get-form-data/{submission_id}", response_model=FormBySubmissionResponse)
 async def get_form_submission(submission_id: str, request: Request):
     user_payload = request.state.user
     if not user_payload:

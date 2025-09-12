@@ -257,7 +257,7 @@ class FormSubmissions:
                     "value": parsed_value
                 })
 
-            return [{
+            return {
                 "submission_id": sub_id,
                 "form_id": form_id,
                 "form_title": form_title,
@@ -265,7 +265,7 @@ class FormSubmissions:
                 "submitted_at": submitted_at,
                 "flagged": flagged,
                 "field_values": field_values,
-            }]
+            }
 
     
 # get all form submissions with filters and pagination
