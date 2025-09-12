@@ -55,25 +55,50 @@ def get_tasks(payload: TaskIdsRequest, request: Request):
     return service.get_tasks_by_ids(payload.task_ids)
 
 #get tasks-list
+
 @task_router.get("/list", response_model=List[TaskListResponse])
 def get_tasks_list(request: Request):
     user_payload = request.state.user
-    role = user_payload.get("role")
     if not user_payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     schema_id = user_payload.get("schema_id")
     user_id = user_payload.get("user_id") or user_payload.get("sub")
+    role = user_payload.get("role")
 
     if not schema_id or not user_id:
         raise HTTPException(status_code=400, detail="Missing user_id or schema_id")
 
-    if not role or role.lower() != "admin":
-        raise HTTPException(status_code=403, detail="Unauthorized user")
-
     service = TaskService(schema_id)
-    tasks = service.get_tasks_list(uuid.UUID(user_id))
+
+    if role and role.lower() == "admin":
+        tasks = service.get_tasks_list(uuid.UUID(user_id))
+    else:
+        tasks = service.get_tasks_list_for_user(uuid.UUID(user_id))
+
     return tasks
+
+
+
+# @task_router.get("/list", response_model=List[TaskListResponse])
+# def get_tasks_list(request: Request):
+#     user_payload = request.state.user
+#     role = user_payload.get("role")
+#     if not user_payload:
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+
+#     schema_id = user_payload.get("schema_id")
+#     user_id = user_payload.get("user_id") or user_payload.get("sub")
+
+#     if not schema_id or not user_id:
+#         raise HTTPException(status_code=400, detail="Missing user_id or schema_id")
+
+#     if not role or role.lower() != "admin":
+#         raise HTTPException(status_code=403, detail="Unauthorized user")
+
+#     service = TaskService(schema_id)
+#     tasks = service.get_tasks_list(uuid.UUID(user_id))
+#     return tasks
 
 # get all tasks
 @task_router.get("/all", response_model=PaginatedTasksResponse)
@@ -95,6 +120,7 @@ def get_all_tasks(request: Request, page: int = 1, limit: int = 10):
 
     service = TaskService(schema_id)
     return service.get_all_tasks(uuid.UUID(user_id), page=page, limit=limit)
+
 
 #get task by id
 @task_router.get("/{task_id}", response_model=TaskResponse)

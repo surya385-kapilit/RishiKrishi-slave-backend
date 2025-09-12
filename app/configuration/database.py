@@ -84,44 +84,6 @@ def initialize_db_pool():
             raise RuntimeError(f"Error creating DB pool: {e}")
 
 
-# @contextmanager
-# def get_db_connection(schema: str):
-#     """
-#     A context manager to handle the database connection lifecycle.
-#     - Gets a connection from the pool.
-#     - Sets the session's search_path to the provided schema.
-#     - Yields a cursor for database operations.
-#     - Commits on success, rolls back on error.
-#     - Always returns the connection to the pool.
-#     """
-#     if not schema:
-#         raise ValueError("Schema name must be provided.")
-#     if not db_pool:
-#         raise RuntimeError("Database pool is not initialized.")
-
-#     conn = None
-#     try:
-#         conn = db_pool.getconn()
-#         with conn.cursor() as cur:
-#             # IMPORTANT: Set the search_path for the current transaction.
-#             # This is session-specific and won't affect other requests.
-#             # Using a placeholder prevents SQL injection on the schema name.
-#             cur.execute("SET search_path TO %s;", (schema,))
-#             print(f"DB Context: search_path set to '{schema}' for this request.")
-#             yield cur
-#         conn.commit() # Commit the transaction if everything was successful
-#     except Exception as e:
-#         if conn:
-#             conn.rollback() # Rollback on any error
-#         print(f"Error in DB context for schema '{schema}': {e}")
-#         # Re-raise the exception to be handled by FastAPI's error handling
-#         raise
-#     finally:
-#         if conn:
-#             db_pool.putconn(conn)
-#             print(f"DB Context: Connection returned to pool for schema '{schema}'.")
-
-
 @contextmanager
 def get_db_connection(schema: str):
     if not schema:

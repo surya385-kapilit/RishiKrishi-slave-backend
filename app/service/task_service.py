@@ -119,6 +119,32 @@ class TaskService:
                 )
                 for row in rows
             ]
+            print("tasks", len(tasks))
+            return tasks
+
+    #get tasks list for user
+    def get_tasks_list_for_user(self, user_id: uuid.UUID) -> List[TaskListResponse]:
+        with get_db_connection(self.schema_id) as cursor:
+            cursor.execute(
+                """
+                SELECT DISTINCT t.task_id, t.name
+                FROM task t
+                JOIN form f ON t.task_id = f.task_id
+                JOIN form_access fa ON f.form_id = fa.form_id
+                WHERE fa.user_id = %s OR fa.user_id IS NULL
+                
+                """,
+                (str(user_id),),
+            )
+            rows = cursor.fetchall()
+            tasks = [
+                TaskListResponse(
+                    task_id=row[0],
+                    title=row[1]
+                )
+                for row in rows
+            ]
+            print("tasks", len(tasks))
             return tasks  
 
     

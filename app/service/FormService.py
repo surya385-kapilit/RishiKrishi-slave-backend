@@ -187,13 +187,14 @@ class FormService:
             # Fetch form details
             cursor.execute(
                 """
-                SELECT form_id, task_id, title, description, created_by, created_at
+                SELECT form_id, task_id, title, description, created_by, created_at,is_active
                 FROM form
                 WHERE form_id = %s
                 """,
                 (str(form_id),),
             )
             form_row = cursor.fetchone()
+            print("form_row", form_row)
             if not form_row:
                 raise ValueError("Form not found")
 
@@ -231,6 +232,7 @@ class FormService:
             description=form_row[3],
             created_by=form_row[4],
             created_at=form_row[5],
+            is_active=form_row[6],
             fields=fields,
         )
 

@@ -39,6 +39,7 @@ class FormResponse(BaseModel):
     description: Optional[str]
     created_by: str
     created_at: datetime
+    is_active: Optional[bool] = True
     # fields: List[FieldOption]
 class GetAllFormsResponse(BaseModel):
     form_id: UUID

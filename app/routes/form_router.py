@@ -149,7 +149,7 @@ def get_form(form_id: str, request: Request):
 
 
 #Get forms-list by task id
-@form_router.get("/a/{task_id}/forms-list", response_model=List[FormsListResponse])
+@form_router.get("/all/{task_id}/forms-list", response_model=List[FormsListResponse])
 def get_forms_list_by_task(task_id: str, request: Request):
     user_payload = request.state.user
     role = user_payload.get("role")
