@@ -406,24 +406,40 @@ class FormAccessService:
                 return result
 
     # get assigned form to user or supervisour
-    def get_forms_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+
+
+    # get assigned forms for user/supervisor with pagination
+    def get_forms_for_user(self, user_id: str, page: int, limit: int):
         forms = []
+        offset = page * limit
 
         with get_db_connection(self.schema_id) as cursor:
             try:
-                # ✅ Fetch forms with individual access OR all-user access
+                # Count total matching forms
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT f.form_id)
+                    FROM form f
+                    INNER JOIN form_access fa ON f.form_id = fa.form_id
+                    WHERE f.is_active = TRUE
+                    AND (fa.user_id = %s OR fa.user_id IS NULL)
+                    """,
+                    (user_id,),
+                )
+                total_count = cursor.fetchone()[0]
+
+                # Fetch paginated forms
                 cursor.execute(
                     """
                     SELECT DISTINCT f.form_id, f.title, f.description, f.created_by, f.created_at, f.is_active
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
                     WHERE f.is_active = TRUE
-                    AND (
-                            fa.user_id = %s 
-                            OR fa.user_id IS NULL
-                        )
+                    AND (fa.user_id = %s OR fa.user_id IS NULL)
+                    ORDER BY f.created_at DESC
+                    LIMIT %s OFFSET %s
                     """,
-                    (user_id,),
+                    (user_id, limit, offset),
                 )
 
                 records = cursor.fetchall()
@@ -438,7 +454,44 @@ class FormAccessService:
                             "is_active": row[5],
                         }
                     )
+
             except Exception as e:
                 raise e
 
-        return forms
+        return forms, total_count    
+    # def get_forms_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+    #     forms = []
+
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         try:
+    #             # ✅ Fetch forms with individual access OR all-user access
+    #             cursor.execute(
+    #                 """
+    #                 SELECT DISTINCT f.form_id, f.title, f.description, f.created_by, f.created_at, f.is_active
+    #                 FROM form f
+    #                 INNER JOIN form_access fa ON f.form_id = fa.form_id
+    #                 WHERE f.is_active = TRUE
+    #                 AND (
+    #                         fa.user_id = %s 
+    #                         OR fa.user_id IS NULL
+    #                     )
+    #                 """,
+    #                 (user_id,),
+    #             )
+
+    #             records = cursor.fetchall()
+    #             for row in records:
+    #                 forms.append(
+    #                     {
+    #                         "form_id": row[0],
+    #                         "title": row[1],
+    #                         "description": row[2],
+    #                         "created_by": row[3],
+    #                         "created_at": row[4],
+    #                         "is_active": row[5],
+    #                     }
+    #                 )
+    #         except Exception as e:
+    #             raise e
+
+    #     return forms

@@ -71,10 +71,44 @@ def get_forms(request: Request, form_id: str = None):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# get assigned form to user or supervisour
+# get assigned form to user or supervisour with pagenation
+# @AccessToForm_routes.get("/my-forms")
+# def get_my_forms(request: Request):
+#     user_payload = request.state.user
+
+
+#     if not user_payload:
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+
+#     schema_id = user_payload.get("schema_id")
+#     role = user_payload.get("role")
+#     user_id = user_payload.get("sub")
+
+#     if not schema_id:
+#         raise HTTPException(status_code=400, detail="Missing schema_id in token")
+
+#     if not role or role.lower() != "supervisor":
+#         raise HTTPException(status_code=403, detail="Unauthorized user")
+
+#     service = FormAccessService(schema_id)
+#     try:
+#         forms = service.get_forms_for_user(user_id)
+#         if not forms:
+#             return {"message": "There are no form's available for you"}
+#         return forms
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
+
+
 @AccessToForm_routes.get("/my-forms")
-def get_my_forms(request: Request):
+def get_my_forms(
+    request: Request,
+    page: int = Query(0, ge=0, description="Page number, starting from 1"),
+    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+):
     user_payload = request.state.user
+
     if not user_payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -90,9 +124,16 @@ def get_my_forms(request: Request):
 
     service = FormAccessService(schema_id)
     try:
-        forms = service.get_forms_for_user(user_id)
+        forms, total_count = service.get_forms_for_user(user_id, page, limit)
         if not forms:
-            return {"message": "There are no form's available for you"}
-        return forms
+            return {"message": "There are no forms available for you"}
+
+        return {
+            "total_forms": total_count,
+            "page": page,
+            "limit": limit,
+            "forms": forms,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
