@@ -104,8 +104,8 @@ def get_forms(request: Request, form_id: str = None):
 @AccessToForm_routes.get("/my-forms")
 def get_my_forms(
     request: Request,
-    page: int = Query(0, ge=0, description="Page number, starting from 1"),
-    limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    page: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
 ):
     user_payload = request.state.user
 
@@ -127,11 +127,13 @@ def get_my_forms(
         forms, total_count = service.get_forms_for_user(user_id, page, limit)
         if not forms:
             return {"message": "There are no forms available for you"}
-
+        
+        total_pages = (total_count + limit - 1) // limit
         return {
-            "total_forms": total_count,
+            "assigned_forms": total_count,
             "page": page,
             "limit": limit,
+            "total_pages": total_pages,
             "forms": forms,
         }
     except Exception as e:

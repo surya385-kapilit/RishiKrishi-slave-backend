@@ -421,6 +421,7 @@ class FormAccessService:
                     SELECT COUNT(DISTINCT f.form_id)
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
+                    LEFT JOIN task t ON f.task_id = t.task_id
                     WHERE f.is_active = TRUE
                     AND (fa.user_id = %s OR fa.user_id IS NULL)
                     """,
@@ -428,12 +429,21 @@ class FormAccessService:
                 )
                 total_count = cursor.fetchone()[0]
 
-                # Fetch paginated forms
+                # Fetch paginated forms with task info
                 cursor.execute(
                     """
-                    SELECT DISTINCT f.form_id, f.title, f.description, f.created_by, f.created_at, f.is_active
+                    SELECT
+                        f.form_id, 
+                        f.title, 
+                        f.description, 
+                        f.created_by, 
+                        f.created_at, 
+                        f.is_active,
+                        f.task_id,
+                        t.name AS task_title
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
+                    LEFT JOIN task t ON f.task_id = t.task_id
                     WHERE f.is_active = TRUE
                     AND (fa.user_id = %s OR fa.user_id IS NULL)
                     ORDER BY f.created_at DESC
@@ -452,13 +462,16 @@ class FormAccessService:
                             "created_by": row[3],
                             "created_at": row[4],
                             "is_active": row[5],
+                            "task_id": row[6],
+                            "task_title": row[7],
                         }
                     )
 
             except Exception as e:
                 raise e
 
-        return forms, total_count    
+        return forms, total_count
+
     # def get_forms_for_user(self, user_id: str) -> List[Dict[str, Any]]:
     #     forms = []
 
