@@ -1,4 +1,5 @@
 
+import mimetypes
 import boto3
 import uuid
 import os
@@ -56,72 +57,31 @@ class S3Service:
             config=s3_config,
             verify=False,  # Try this if SSL certificate issues
         )
+    def generate_upload_presigned_url(self, object_name: str, expiry_hours: int) -> str:
+        content_type, _ = mimetypes.guess_type(object_name)
+        if not content_type:
+            content_type = "application/octet-stream"
 
-    async def upload_file(self, file: UploadFile) -> Optional[str]:
-        try:
-            # Get file extension and content type
-            file_extension = self._get_file_extension(file.filename).lower()
-            content_type = file.content_type
+        return self.s3_client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self.bucket_name,
+                "Key": object_name,
+                "ContentType": content_type
+            },
+            ExpiresIn=expiry_hours * 3600
+        )
 
-            # Validate file type and size based on category
-            if file_extension in [".jpg", ".jpeg", ".png", ".jfif"]:
-                max_size = 20 * 1024 * 1024
-            elif file_extension in [".mp4", ".mov", ".avi", ".mkv"]:
-                max_size = 1024 * 1024 * 1024
-            elif file_extension in [
-                ".pdf",
-                ".doc",
-                ".docx",
-                ".xls",
-                ".xlsx",
-                ".ppt",
-                ".pptx",
-            ]:
-                max_size = 500 * 1024 * 1024
-            else:
-                max_size = 500 * 1024 * 1024
-
-            if file.size > max_size:
-                raise ValueError(f"File size exceeds {max_size/(1024*1024)}MB limit")
-
-            # Generate unique filename
-            if file_extension in [".jpg", ".jpeg", ".png", ".jfif"]:
-                folder = "images"
-            elif file_extension in [".mp4", ".mov", ".avi", ".mkv"]:
-                folder = "videos"
-            elif file_extension in [
-                ".pdf",
-                ".doc",
-                ".docx",
-                ".xls",
-                ".xlsx",
-                ".ppt",
-                ".pptx",
-            ]:
-                folder = "documents"
-            else:
-                folder = "others"
-
-            file_name = f"rishikrish/{folder}/{uuid.uuid4()}{file_extension}"
-
-            # Read file content
-            content = await file.read()
-
-            # Upload to S3
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=file_name,
-                Body=content,
-                ContentType=content_type,
-            )
-
-            return f"{self.endpoint}{self.bucket_name}/{file_name}"
-
-        except Exception as e:
-            logger.error(f"S3 upload failed for {file.filename}: {str(e)}")
-            raise Exception(f"S3 upload failed: {str(e)}")
-
+    def generate_download_presigned_url(self, object_name: str, expiry_hours: int) -> str:
+        return self.s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self.bucket_name, "Key": object_name},
+            ExpiresIn=expiry_hours * 3600
+        )
     def _get_file_extension(self, filename: str) -> str:
         if not filename:
             return ""
         return os.path.splitext(filename)[1] or ""
+    
+
+

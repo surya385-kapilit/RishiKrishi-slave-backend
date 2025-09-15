@@ -18,7 +18,7 @@ class FormSubmissionRequest(BaseModel):
     form_id: UUID
     submitted_by: Optional[UUID] = None
     field_values: List[FieldValue]
-    file_mappings: Optional[List[FileMapping]] = None  # New field for file mappings
+    # file_mappings: Optional[List[FileMapping]] = None  # New field for file mappings
 
 
 class FormSubmissionResponse(BaseModel):
@@ -58,3 +58,20 @@ class FormBySubmissionResponse(BaseModel):
     submitted_at: datetime
     flagged: Optional[str]
     field_values: List[FieldValueResponse]
+
+
+# Presigned URL generation models
+class PresignedUrlRequest(BaseModel):
+    fileNames: List[str]
+    expiryHours: int = 1
+    folder: Optional[str] = None
+
+
+class PresignedUrlResponse(BaseModel):
+    success: bool
+    presignedUrls: dict
+    folder: Optional[str]
+    count: int
+    expiryHours: int
+    method: str
+    message: str

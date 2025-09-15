@@ -18,61 +18,139 @@ class FormSubmissions:
     def __init__(self, schema_id: str):
         self.schema_id = schema_id
 
+    # async def submit_form_with_files(
+    #     self,
+    #     form_id: str,
+    #     submitted_by: str,
+    #     field_values: List[FieldValue],
+    #     files: Optional[List[UploadFile]],
+    #     s3: S3Service,
+    #     parsed_data: Optional[FormSubmissionRequest] = None,
+    # ):
+    #     """
+    #     Save form submission and handle multiple file uploads for the same field_id using file_mappings.
+    #     """
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         # Map files to field_ids, allowing multiple files per field_id
+    #         file_map = {}
+    #         if files and parsed_data and parsed_data.file_mappings:
+    #             # Validate file_mappings
+    #             file_field_ids = {str(mapping.field_id) for mapping in parsed_data.file_mappings}
+    #             field_ids = {str(fv.field_id) for fv in field_values}
+                
+    #             # Check if all mapped field_ids exist in field_values
+    #             if not file_field_ids.issubset(field_ids):
+    #                 raise HTTPException(
+    #                     status_code=400,
+    #                     detail="Some field_ids in file_mappings do not exist in field_values",
+    #                 )
+
+    #             # Check for duplicate file_indices
+    #             file_indices = [mapping.file_index for mapping in parsed_data.file_mappings]
+    #             if len(file_indices) != len(set(file_indices)):
+    #                 raise HTTPException(
+    #                     status_code=400,
+    #                     detail="Duplicate file_index values in file_mappings",
+    #                 )
+
+    #             # Check if file_indices are valid
+    #             max_index = len(files) - 1
+    #             if any(mapping.file_index < 0 or mapping.file_index > max_index for mapping in parsed_data.file_mappings):
+    #                 raise HTTPException(
+    #                     status_code=400,
+    #                     detail=f"Invalid file_index in file_mappings; must be between 0 and {max_index}",
+    #                 )
+
+    #             # Upload files concurrently
+    #             upload_tasks = [s3.upload_file(files[mapping.file_index]) for mapping in parsed_data.file_mappings]
+    #             uploaded_urls = await asyncio.gather(*upload_tasks, return_exceptions=True)
+
+    #             # Map uploaded URLs to field_ids, allowing multiple URLs per field_id
+    #             for mapping, url in zip(parsed_data.file_mappings, uploaded_urls):
+    #                 if isinstance(url, Exception):
+    #                     raise HTTPException(status_code=400, detail=f"File upload failed: {str(url)}")
+    #                 field_id = str(mapping.field_id)
+    #                 if field_id not in file_map:
+    #                     file_map[field_id] = []
+    #                 file_map[field_id].append(url)
+
+    #             logger.debug(f"File map: {file_map}")
+
+    #         # Merge file URLs into field_values
+    #         final_field_values = []
+    #         for fv in field_values:
+    #             fid = str(fv.field_id)
+    #             if fid in file_map:
+    #                 # Store all URLs for this field as a JSON array in one row
+    #                 final_field_values.append({
+    #                     "field_id": fid,
+    #                     "value": json.dumps(file_map[fid])  # Convert Python list to JSON string
+    #                 })
+    #             # Handle multiselect/checkbox fields (array values)
+    #             elif isinstance(fv.value, list):
+    #                 # Convert array to JSON string for storage
+    #                 final_field_values.append({
+    #                     "field_id": fid,
+    #                     "value": json.dumps(fv.value)  # Store as JSON array string
+    #                 })
+    #             # Handle single values (strings, numbers, etc.)
+    #             else:
+    #                 final_field_values.append({
+    #                     "field_id": fid,
+    #                     "value": str(fv.value) if fv.value is not None else None
+    #                 })
+    #         logger.debug(f"Final field values: {final_field_values}")
+    #         submission_id = str(uuid.uuid4())  # Generate UUID in Python
+    #         # Insert into form_submissions and get submission time
+    #         cursor.execute(
+    #             """
+    #             INSERT INTO form_submissions (submission_id, form_id, submitted_by, submitted_at)
+    #             VALUES (%s, %s, %s, NOW())
+    #             RETURNING submitted_at
+    #             """,
+    #             (submission_id, str(form_id), str(submitted_by)),
+    #         )
+    #         submitted_at = cursor.fetchone()[0]
+
+    #         # Insert field values, supporting multiple rows for the same field_id
+    #         for fv in final_field_values:
+    #             cursor.execute(
+    #                 """
+    #                 INSERT INTO form_field_values (id, submission_id, field_id, value_text)
+    #                 VALUES (%s, %s, %s, %s)
+    #                 """,
+    #                 (str(uuid.uuid4()), str(submission_id), fv["field_id"], fv["value"]),
+    #             )
+
+    #     return {
+    #         "message": "Form submitted successfully",
+    #         "submission_id": submission_id,
+    #         "submitted_at": submitted_at,
+    #     }
     async def submit_form_with_files(
-        self,
-        form_id: str,
-        submitted_by: str,
-        field_values: List[FieldValue],
-        files: Optional[List[UploadFile]],
-        s3: S3Service,
-        parsed_data: Optional[FormSubmissionRequest] = None,
-    ):
+    self,
+    form_id: str,
+    submitted_by: str,
+    field_values: List[FieldValue],
+    files: Optional[List[UploadFile]],
+    s3: S3Service,
+):
         """
-        Save form submission and handle multiple file uploads for the same field_id using file_mappings.
+        Save form submission and handle file uploads (one file per field if provided).
         """
         with get_db_connection(self.schema_id) as cursor:
-            # Map files to field_ids, allowing multiple files per field_id
             file_map = {}
-            if files and parsed_data and parsed_data.file_mappings:
-                # Validate file_mappings
-                file_field_ids = {str(mapping.field_id) for mapping in parsed_data.file_mappings}
-                field_ids = {str(fv.field_id) for fv in field_values}
-                
-                # Check if all mapped field_ids exist in field_values
-                if not file_field_ids.issubset(field_ids):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Some field_ids in file_mappings do not exist in field_values",
-                    )
 
-                # Check for duplicate file_indices
-                file_indices = [mapping.file_index for mapping in parsed_data.file_mappings]
-                if len(file_indices) != len(set(file_indices)):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Duplicate file_index values in file_mappings",
-                    )
-
-                # Check if file_indices are valid
-                max_index = len(files) - 1
-                if any(mapping.file_index < 0 or mapping.file_index > max_index for mapping in parsed_data.file_mappings):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid file_index in file_mappings; must be between 0 and {max_index}",
-                    )
-
-                # Upload files concurrently
-                upload_tasks = [s3.upload_file(files[mapping.file_index]) for mapping in parsed_data.file_mappings]
+            if files:
+                # Upload all files concurrently
+                upload_tasks = [s3.upload_file(file) for file in files]
                 uploaded_urls = await asyncio.gather(*upload_tasks, return_exceptions=True)
 
-                # Map uploaded URLs to field_ids, allowing multiple URLs per field_id
-                for mapping, url in zip(parsed_data.file_mappings, uploaded_urls):
+                # Assign URLs to field_ids (match by order)
+                for fv, url in zip(field_values, uploaded_urls):
                     if isinstance(url, Exception):
                         raise HTTPException(status_code=400, detail=f"File upload failed: {str(url)}")
-                    field_id = str(mapping.field_id)
-                    if field_id not in file_map:
-                        file_map[field_id] = []
-                    file_map[field_id].append(url)
+                    file_map[str(fv.field_id)] = url
 
                 logger.debug(f"File map: {file_map}")
 
@@ -81,27 +159,24 @@ class FormSubmissions:
             for fv in field_values:
                 fid = str(fv.field_id)
                 if fid in file_map:
-                    # Store all URLs for this field as a JSON array in one row
                     final_field_values.append({
                         "field_id": fid,
-                        "value": json.dumps(file_map[fid])  # Convert Python list to JSON string
+                        "value": file_map[fid]
                     })
-                # Handle multiselect/checkbox fields (array values)
                 elif isinstance(fv.value, list):
-                    # Convert array to JSON string for storage
                     final_field_values.append({
                         "field_id": fid,
-                        "value": json.dumps(fv.value)  # Store as JSON array string
+                        "value": json.dumps(fv.value)
                     })
-                # Handle single values (strings, numbers, etc.)
                 else:
                     final_field_values.append({
                         "field_id": fid,
                         "value": str(fv.value) if fv.value is not None else None
                     })
+
             logger.debug(f"Final field values: {final_field_values}")
-            submission_id = str(uuid.uuid4())  # Generate UUID in Python
-            # Insert into form_submissions and get submission time
+
+            submission_id = str(uuid.uuid4())
             cursor.execute(
                 """
                 INSERT INTO form_submissions (submission_id, form_id, submitted_by, submitted_at)
@@ -112,7 +187,6 @@ class FormSubmissions:
             )
             submitted_at = cursor.fetchone()[0]
 
-            # Insert field values, supporting multiple rows for the same field_id
             for fv in final_field_values:
                 cursor.execute(
                     """
@@ -127,6 +201,9 @@ class FormSubmissions:
             "submission_id": submission_id,
             "submitted_at": submitted_at,
         }
+
+    
+    
     async def update_form_with_files(
         self,
         submission_id: str,
