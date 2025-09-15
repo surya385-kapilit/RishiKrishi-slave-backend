@@ -432,7 +432,7 @@ async def generate_upload_presigned_urls(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # ✅ New role check
-    if not role or role.lower() != "admin":
+    if not role or role.lower() not in ["admin", "supervisor"]:
         raise HTTPException(status_code=403, detail="Unauthorized user")
 
     try:
