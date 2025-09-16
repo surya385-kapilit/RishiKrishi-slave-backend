@@ -15,90 +15,6 @@ form_submissions_router = APIRouter(prefix="/api/forms/submissions", tags=["Task
 flag_submission_router = APIRouter(prefix="/api", tags=["Flaged Submissions"])
 filter_router = APIRouter(prefix="/api", tags=["Reports"])
 
-# # data can be submitted by either admin or user
-# @form_submissions_router.post("/submit-form", response_model=FormSubmissionResponse)
-# async def submit_form(
-#     request: Request,
-#     form_data: str = Form(...),  # JSON as string in multipart requests
-#     files: Optional[List[UploadFile]] = File(None),  # Expected files field
-# ):
-#     # Debug the entire form data received
-#     form = await request.form()
-#     logger.debug(f"Received form fields: {form.keys()}")
-#     logger.debug(f"Received files: {files}")
-
-#     user_payload = request.state.user
-#     if not user_payload:
-#         raise HTTPException(status_code=401, detail="Unauthorized")
-
-#     schema_id = user_payload.get("schema_id")
-#     submitted_by = user_payload.get("sub")  # token "sub" claim as user ID
-
-#     if not schema_id:
-#         raise HTTPException(status_code=400, detail="Missing schema_id in token")
-
-#     try:
-#         form_data_dict = json.loads(form_data)
-#         # Convert any array values in field_values to proper format
-#         if "field_values" in form_data_dict:
-#             for field_value in form_data_dict["field_values"]:
-#                 if isinstance(field_value.get("value"), list):
-#                     # Keep as list - Pydantic model will handle it now
-#                     continue
-#                 # Handle string representation of arrays (fallback)
-#                 elif (
-#                     isinstance(field_value.get("value"), str)
-#                     and field_value["value"].startswith("[")
-#                     and field_value["value"].endswith("]")
-#                 ):
-#                     try:
-#                         field_value["value"] = json.loads(field_value["value"])
-#                     except json.JSONDecodeError:
-#                         pass  # Keep as string if not valid JSON
-#         parsed_data = FormSubmissionRequest(**form_data_dict)
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         logger.error(f"Invalid form_data JSON: {str(e)}")
-#         raise HTTPException(status_code=422, detail=f"Invalid form_data JSON: {str(e)}")
-
-#     # Validate files and file_mappings
-#     if parsed_data.file_mappings and not files:
-#         logger.error(
-#             f"file_mappings provided: {parsed_data.file_mappings}, but no files received"
-#         )
-#         raise HTTPException(
-#             status_code=400,
-#             detail="file_mappings provided but no files uploaded. Ensure files are sent in the 'files' field.",
-#         )
-#     if files and (not parsed_data.file_mappings or len(parsed_data.file_mappings) == 0):
-#         logger.error(
-#             f"Files provided: {[f.filename for f in files]}, but no file_mappings specified"
-#         )
-#         raise HTTPException(
-#             status_code=400,
-#             detail="Files provided but no file_mappings specified in form_data",
-#         )
-
-#     service = FormSubmissions(schema_id)
-#     s3 = S3Service()
-
-#     try:
-#         return await service.submit_form_with_files(
-#             form_id=str(parsed_data.form_id),
-#             submitted_by=submitted_by,
-#             field_values=parsed_data.field_values,
-#             files=files,
-#             s3=s3,
-#             parsed_data=parsed_data,  # Pass parsed_data for file_mappings
-#         )
-        
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         logger.error(f"Error in submit_form: {str(e)}")
-#         raise HTTPException(status_code=400, detail=str(e))
-    
 # data can be submitted by either admin or user
 @form_submissions_router.post("/submit-form", response_model=FormSubmissionResponse)
 async def submit_form(
@@ -153,7 +69,6 @@ async def submit_form(
     except Exception as e:
         logger.error(f"Error in submit_form: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
-
 
 
 # Update form fields after submission
