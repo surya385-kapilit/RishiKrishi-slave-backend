@@ -44,7 +44,7 @@ def create_task(task_data: TaskCreate, request: Request):
     return service.create_task(task_data)
 
 #get Favourite tasks by ids
-@task_router.get("/favourite", response_model=List[TaskResponse])
+@task_router.post("/favourite", response_model=List[TaskResponse])
 def get_tasks(payload: TaskIdsRequest, request: Request):
     user_payload = request.state.user
     role = user_payload.get("role")
