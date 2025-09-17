@@ -436,7 +436,8 @@ class FormAccessService:
                         f.form_id, 
                         f.title, 
                         f.description, 
-                        f.created_by, 
+                        f.created_by,
+                        u.full_name ,
                         f.created_at, 
                         f.is_active,
                         f.task_id,
@@ -444,6 +445,7 @@ class FormAccessService:
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
                     LEFT JOIN task t ON f.task_id = t.task_id
+                    JOIN users u ON f.created_by = u.user_id
                     WHERE f.is_active = TRUE
                     AND (fa.user_id = %s OR fa.user_id IS NULL)
                     ORDER BY f.created_at DESC
@@ -459,11 +461,11 @@ class FormAccessService:
                             "form_id": row[0],
                             "title": row[1],
                             "description": row[2],
-                            "created_by": row[3],
-                            "created_at": row[4],
-                            "is_active": row[5],
-                            "task_id": row[6],
-                            "task_title": row[7],
+                            "created_by": row[4],
+                            "created_at": row[5],
+                            "is_active": row[6],
+                            "task_id": row[7],
+                            "task_title": row[8],
                         }
                     )
 
