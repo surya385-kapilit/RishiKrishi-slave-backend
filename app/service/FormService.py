@@ -338,38 +338,84 @@ class FormService:
                 raise ValueError("Field not found in this form")
         return True
     #Get forms-list by task
-    def get_forms_list_by_task(self, task_id: str) -> List[Dict[str, Any]]:
+    # def get_forms_list_by_task(self, task_id: str) -> List[Dict[str, Any]]:
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         # Check if task exists
+    #         cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (str(task_id),))
+    #         task_exists = cursor.fetchone()
+    #         if not task_exists:
+    #             raise HTTPException(status_code=404, detail="Task not found")
+
+    #         # Fetch forms for the task
+    #         cursor.execute(
+    #             """
+    #             SELECT f.form_id, f.task_id, f.title ,is_active
+    #             FROM form f
+    #             JOIN users u ON f.created_by = u.user_id
+    #             WHERE f.task_id = %s
+    #             ORDER BY f.title ASC
+    #             """,
+    #             (str(task_id),),
+    #         )
+    #         forms = cursor.fetchall()
+
+    #     form_list = [
+    #         {
+    #             "form_id": str(f[0]),
+    #             "title": f[2],
+    #             "is_active": f[3],
+
+    #         }
+    #         for f in forms
+    #     ]
+    #     return form_list
+    # ✅ For Admin – Get all forms under a task
+    def get_forms_list_by_task_admin(self, task_id: str) -> List[Dict[str, Any]]:
         with get_db_connection(self.schema_id) as cursor:
-            # Check if task exists
-            cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (str(task_id),))
-            task_exists = cursor.fetchone()
-            if not task_exists:
+            cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (task_id,))
+            if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="Task not found")
 
-            # Fetch forms for the task
             cursor.execute(
                 """
-                SELECT f.form_id, f.task_id, f.title ,is_active
+                SELECT f.form_id, f.title, f.is_active
                 FROM form f
-                JOIN users u ON f.created_by = u.user_id
                 WHERE f.task_id = %s
                 ORDER BY f.title ASC
                 """,
-                (str(task_id),),
+                (task_id,),
             )
             forms = cursor.fetchall()
 
-        form_list = [
-            {
-                "form_id": str(f[0]),
-                "title": f[2],
-                "is_active": f[3],
-
-            }
+        return [
+            {"form_id": str(f[0]), "title": f[1], "is_active": f[2]}
             for f in forms
         ]
-        return form_list
 
+    # ✅ For Non-Admin – Get only forms assigned to the user inside the given task
+    def get_forms_list_by_task_for_user(self, task_id: str, user_id: str) -> List[Dict[str, Any]]:
+        with get_db_connection(self.schema_id) as cursor:
+            cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (task_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Task not found")
+
+            cursor.execute(
+                """
+                SELECT DISTINCT f.form_id, f.title, f.is_active
+                FROM form f
+                JOIN form_access fa ON f.form_id = fa.form_id
+                WHERE f.task_id = %s
+                  AND fa.user_id = %s
+                ORDER BY f.title ASC
+                """,
+                (task_id, user_id),
+            )
+            forms = cursor.fetchall()
+
+        return [
+            {"form_id": str(f[0]), "title": f[1], "is_active": f[2]}
+            for f in forms
+        ]
 
     # Get forms by task with pagination
     def get_forms_by_task(self, task_id: str, page: int = 0, limit: int = 10) -> dict:

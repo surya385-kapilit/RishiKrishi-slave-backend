@@ -149,29 +149,57 @@ def get_form(form_id: str, request: Request):
 
 
 #Get forms-list by task id
+# @form_router.get("/all/{task_id}/forms-list", response_model=List[FormsListResponse])
+# def get_forms_list_by_task(task_id: str, request: Request):
+#     user_payload = request.state.user
+#     role = user_payload.get("role")
+
+#     if not user_payload:
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+
+#     schema_id = user_payload.get("schema_id")
+#     if not schema_id:
+#         raise HTTPException(status_code=400, detail="Missing schema_id in token")
+
+#     if not role or role.lower() != "admin":
+#         raise HTTPException(status_code=403, detail="Unauthorized user")
+
+#     service = FormService(schema_id)
+#     try:
+#         return service.get_forms_list_by_task(task_id)
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
 @form_router.get("/all/{task_id}/forms-list", response_model=List[FormsListResponse])
 def get_forms_list_by_task(task_id: str, request: Request):
     user_payload = request.state.user
-    role = user_payload.get("role")
-
     if not user_payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     schema_id = user_payload.get("schema_id")
-    if not schema_id:
-        raise HTTPException(status_code=400, detail="Missing schema_id in token")
+    user_id = user_payload.get("user_id") or user_payload.get("sub")
+    role = user_payload.get("role")
 
-    if not role or role.lower() not in ["admin", "supervisor"]:
-        raise HTTPException(status_code=403, detail="Unauthorized user")
+    if not schema_id or not user_id:
+        raise HTTPException(status_code=400, detail="Missing user_id or schema_id")
 
     service = FormService(schema_id)
+
     try:
-        return service.get_forms_list_by_task(task_id)
+        if role and role.lower() == "admin":
+            return service.get_forms_list_by_task_admin(task_id)
+        else:
+            return service.get_forms_list_by_task_for_user(task_id, str(user_id))
     except HTTPException as he:
         raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+
+
+
 # Get forms by task with pagination
 @form_router.get("/tasks/{task_id}/forms", response_model=PaginatedFormsResponse)
 def get_forms_by_task(task_id: str, request: Request, page: int = 1, limit: int = 10):
