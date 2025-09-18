@@ -1,7 +1,10 @@
+import csv
+import io
 import json
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.Models.form_submittions import FlagRequest, FormBySubmissionResponse, FormSubmissionRequest, FormSubmissionResponse, FormUpdateRequest, FormUpdateResponse, PresignedUrlRequest, PresignedUrlResponse
 from app.configuration.s3service import S3Service
@@ -384,3 +387,50 @@ async def generate_upload_presigned_urls(
     except Exception as e:
         logger.error(f"Error generating presigned URLs: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+@form_submissions_router.post("/submissions/export")
+async def export_submissions(request: Request, filters: dict):
+    user_payload = request.state.user
+    if not user_payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    role = user_payload.get("role")
+    schema_id = user_payload.get("schema_id")
+
+    if not schema_id:
+        raise HTTPException(status_code=400, detail="Missing schema_id in token")
+
+    # 🚨 Only admins allowed
+    if role.lower() != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can export submissions")
+
+    service = FormSubmissions(schema_id)
+
+    submissions = await service.export_submissions(
+        form_id=filters.get("form_id"),
+        task_id=filters.get("task_id"),
+        submitted_by=filters.get("submitted_by"),
+        flagged=filters.get("flagged"),
+        start_date=filters.get("start_date"),
+        end_date=filters.get("end_date"),
+    )
+
+    # Prepare CSV in memory
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=[
+        "submission_id", "task_id", "task_name", "form_id", "form_title",
+        "submitted_by", "submitted_at", "flagged"
+    ])
+    writer.writeheader()
+    writer.writerows(submissions)
+
+    output.seek(0)
+
+    # Stream back as downloadable CSV
+    return StreamingResponse(
+        iter([output.read()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=submissions_export.csv"}
+    )

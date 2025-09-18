@@ -161,7 +161,7 @@ def get_forms_list_by_task(task_id: str, request: Request):
     if not schema_id:
         raise HTTPException(status_code=400, detail="Missing schema_id in token")
 
-    if not role or role.lower() != "admin":
+    if not role or role.lower() not in ["admin", "supervisor"]:
         raise HTTPException(status_code=403, detail="Unauthorized user")
 
     service = FormService(schema_id)
