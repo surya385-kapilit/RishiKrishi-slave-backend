@@ -3,6 +3,7 @@
 -- ALTER TABLE public.--table_nmae--
 -- ALTER COLUMN created_at SET DEFAULT (NOW() AT TIME ZONE 'Asia/Kolkata');
 
+-- ALTER TABLE salaar2.notifications add column submission_id UUID    this should add in the notifications table
 
 
 CREATE TABLE users (

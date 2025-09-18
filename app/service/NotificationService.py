@@ -113,138 +113,7 @@ class NotificationService:
                     "message": "Marked as read (ALL)",
                 }
 
-    # def list_notifications(self, user_id: str, role: str, page: int, limit: int, status: Optional[str]) -> Dict[str, Any]:
-    #     offset = (page - 1) * limit
 
-    #     # Build WHERE condition for read/unread
-    #     status_condition = ""
-    #     if status == "unread":
-    #         status_condition = " AND n.is_read = FALSE "
-    #     elif status == "read":
-    #         status_condition = " AND n.is_read = TRUE "
-
-    #     with get_db_connection(self.schema_id) as cursor:
-    #         # --- Count total ---
-    #         if role.lower() == "admin":
-    #             # ✅ Admins only see their own notifications
-    #             cursor.execute(
-    #                 f"""
-    #                 SELECT COUNT(*)
-    #                 FROM notifications n
-    #                 WHERE n.user_id = %s {status_condition};
-    #                 """,
-    #                 (user_id,),
-    #             )
-    #         else:
-    #             # ✅ Normal users see own + "all" access notifications
-    #             cursor.execute(
-    #                 f"""
-    #                 SELECT COUNT(*) AS total_count FROM (
-    #                     SELECT n.notification_id
-    #                     FROM notifications n
-    #                     WHERE n.user_id = %s {status_condition}
-
-    #                     UNION ALL
-
-    #                     SELECT n.notification_id
-    #                     FROM notifications n
-    #                     JOIN form_access fa ON fa.form_id = n.form_id
-    #                     WHERE fa.access_type = 'all' {status_condition}
-    #                 ) AS combined;
-    #                 """,
-    #                 (user_id,),
-    #             )
-
-    #         total_count = cursor.fetchone()[0]
-    #         total_pages = (total_count + limit - 1) // limit
-
-    #         # --- Fetch paginated notifications ---
-    #         if role.lower() == "admin":
-    #             cursor.execute(
-    #                 f"""
-    #                 SELECT
-    #                     n.notification_id,
-    #                     n.title,
-    #                     n.message,
-    #                     n.is_read,
-    #                     n.created_at,
-    #                     n.form_id,
-    #                     f.title AS form_title,
-    #                     'individual' AS access_type
-    #                 FROM notifications n
-    #                 LEFT JOIN form f ON n.form_id = f.form_id
-    #                 WHERE n.user_id = %s {status_condition}
-    #                 ORDER BY created_at DESC
-    #                 LIMIT %s OFFSET %s;
-    #                 """,
-    #                 (user_id, limit, offset),
-    #             )
-    #         else:
-    #             cursor.execute(
-    #                 f"""
-    #                 SELECT * FROM (
-    #                     SELECT
-    #                         n.notification_id,
-    #                         n.title,
-    #                         n.message,
-    #                         n.is_read,
-    #                         n.created_at,
-    #                         n.form_id,
-    #                         f.title AS form_title,
-    #                         'individual' AS access_type
-    #                     FROM notifications n
-    #                     LEFT JOIN form f ON n.form_id = f.form_id
-    #                     WHERE n.user_id = %s {status_condition}
-
-    #                     UNION ALL
-
-    #                     SELECT
-    #                         n.notification_id,
-    #                         n.title,
-    #                         n.message,
-    #                         n.is_read,
-    #                         n.created_at,
-    #                         n.form_id,
-    #                         f.title AS form_title,
-    #                         'all' AS access_type
-    #                     FROM notifications n
-    #                     JOIN form_access fa ON fa.form_id = n.form_id
-    #                     LEFT JOIN form f ON n.form_id = f.form_id
-    #                     WHERE fa.access_type = 'all' {status_condition}
-    #                 ) AS combined
-    #                 ORDER BY created_at DESC
-    #                 LIMIT %s OFFSET %s;
-    #                 """,
-    #                 (user_id, limit, offset),
-    #             )
-
-    #         rows = cursor.fetchall()
-
-    #         notifications = [
-    #             {
-    #                 "notification_id": row[0],
-    #                 "title": row[1],
-    #                 "message": row[2],
-    #                 "is_read": row[3],
-    #                 "created_at": row[4],
-    #                 "form_id": row[5],
-    #                 "form_title": row[6],
-    #                 "access_type": row[7],
-    #             }
-    #             for row in rows
-    #         ]
-
-    #     return {
-    #         "notifications": notifications,
-    #         "pagination": {
-    #             "total_count": total_count,
-    #             "total_pages": total_pages,
-    #             "current_page": page,
-    #             "limit": limit,
-    #             "next_page": page < total_pages,
-    #             "previous_page": page > 1,
-    #         },
-    #     }
 
     def list_notifications(
         self, user_id: str, role: str, page: int, limit: int, status: Optional[str]
@@ -300,6 +169,7 @@ class NotificationService:
             total_pages = (total_count + limit - 1) // limit
 
             # --- Fetch paginated notifications ---
+            # --- Fetch paginated notifications ---
             if role.lower() == "admin":
                 cursor.execute(
                     f"""
@@ -311,7 +181,8 @@ class NotificationService:
                         n.created_at,
                         n.form_id,
                         f.title AS form_title,
-                        'individual' AS access_type
+                        'individual' AS access_type,
+                        n.submission_id
                     FROM notifications n
                     LEFT JOIN form f ON n.form_id = f.form_id
                     WHERE n.user_id = %s
@@ -326,52 +197,59 @@ class NotificationService:
                 cursor.execute(
                     f"""
                     SELECT *
-FROM (
-    -- individual
-    SELECT 
-        n.notification_id,
-        n.title,
-        n.message,
-        n.is_read,
-        n.created_at,
-        n.form_id,
-        f.title AS form_title,
-        'individual' AS access_type
-    FROM notifications n
-    LEFT JOIN form f ON n.form_id = f.form_id
-    WHERE n.user_id = %s
+                    FROM (
+                        -- individual
+                        SELECT 
+                            n.notification_id,
+                            n.title,
+                            n.message,
+                            n.is_read,
+                            n.created_at,
+                            n.form_id,
+                            f.title AS form_title,
+                            'individual' AS access_type,
+                            n.submission_id
+                        FROM notifications n
+                        LEFT JOIN form f ON n.form_id = f.form_id
+                        WHERE n.user_id = %s
 
-    UNION ALL
+                        UNION ALL
 
-    -- all
-    SELECT 
-        n.notification_id,
-        n.title,
-        n.message,
-        CASE WHEN EXISTS (
-            SELECT 1 FROM notification_reads nr
-            WHERE nr.notification_id = n.notification_id
-            AND nr.user_id = %s
-        ) THEN TRUE ELSE FALSE END AS is_read,
-        n.created_at,
-        n.form_id,
-        f.title AS form_title,
-        'all' AS access_type
-    FROM notifications n
-    JOIN form_access fa ON fa.form_id = n.form_id
-    LEFT JOIN form f ON n.form_id = f.form_id
-    WHERE fa.access_type = 'all'
-) AS combined
-{ "WHERE combined.is_read = FALSE" if status == "unread" else "" }
-{ "WHERE combined.is_read = TRUE" if status == "read" else "" }
-ORDER BY created_at DESC
-LIMIT %s OFFSET %s;
+                        -- all
+                        SELECT 
+                            n.notification_id,
+                            n.title,
+                            n.message,
+                            CASE WHEN EXISTS (
+                                SELECT 1 FROM notification_reads nr
+                                WHERE nr.notification_id = n.notification_id
+                                AND nr.user_id = %s
+                            ) THEN TRUE ELSE FALSE END AS is_read,
+                            n.created_at,
+                            n.form_id,
+                            f.title AS form_title,
+                            'all' AS access_type,
+                            n.submission_id
+                        FROM notifications n
+                        JOIN form_access fa ON fa.form_id = n.form_id
+                        LEFT JOIN form f ON n.form_id = f.form_id
+                        WHERE fa.access_type = 'all'
+                    ) AS combined
+                    { "WHERE combined.is_read = FALSE" if status == "unread" else "" }
+                    { "WHERE combined.is_read = TRUE" if status == "read" else "" }
+                    ORDER BY created_at DESC
+                    LIMIT %s OFFSET %s;
                     """,
                     (user_id, user_id, limit, offset),
                 )
 
             rows = cursor.fetchall()
+            # print("Row")
+            for row in rows:
+                print(row)
+                print("-----")
 
+            
             notifications = [
                 {
                     "notification_id": row[0],
@@ -382,9 +260,98 @@ LIMIT %s OFFSET %s;
                     "form_id": row[5],
                     "form_title": row[6],
                     "access_type": row[7],
+                    "submission_id": row[8],
+                    "navigation": "submissions" if row[8] else "form",  
                 }
                 for row in rows
+                
             ]
+
+#             if role.lower() == "admin":
+#                 cursor.execute(
+#                     f"""
+#                     SELECT 
+#                         n.notification_id,
+#                         n.title,
+#                         n.message,
+#                         n.is_read,
+#                         n.created_at,
+#                         n.form_id,
+#                         f.title AS form_title,
+#                         'individual' AS access_type
+#                     FROM notifications n
+#                     LEFT JOIN form f ON n.form_id = f.form_id
+#                     WHERE n.user_id = %s
+#                     {"AND n.is_read = FALSE" if status == "unread" else ""}
+#                     {"AND n.is_read = TRUE" if status == "read" else ""}
+#                     ORDER BY created_at DESC
+#                     LIMIT %s OFFSET %s;
+#                     """,
+#                     (user_id, limit, offset),
+#                 )
+#             else:
+#                 cursor.execute(
+#                     f"""
+#                     SELECT *
+# FROM (
+#     -- individual
+#     SELECT 
+#         n.notification_id,
+#         n.title,
+#         n.message,
+#         n.is_read,
+#         n.created_at,
+#         n.form_id,
+#         f.title AS form_title,
+#         'individual' AS access_type
+#     FROM notifications n
+#     LEFT JOIN form f ON n.form_id = f.form_id
+#     WHERE n.user_id = %s
+
+#     UNION ALL
+
+#     -- all
+#     SELECT 
+#         n.notification_id,
+#         n.title,
+#         n.message,
+#         CASE WHEN EXISTS (
+#             SELECT 1 FROM notification_reads nr
+#             WHERE nr.notification_id = n.notification_id
+#             AND nr.user_id = %s
+#         ) THEN TRUE ELSE FALSE END AS is_read,
+#         n.created_at,
+#         n.form_id,
+#         f.title AS form_title,
+#         'all' AS access_type
+#     FROM notifications n
+#     JOIN form_access fa ON fa.form_id = n.form_id
+#     LEFT JOIN form f ON n.form_id = f.form_id
+#     WHERE fa.access_type = 'all'
+# ) AS combined
+# { "WHERE combined.is_read = FALSE" if status == "unread" else "" }
+# { "WHERE combined.is_read = TRUE" if status == "read" else "" }
+# ORDER BY created_at DESC
+# LIMIT %s OFFSET %s;
+#                     """,
+#                     (user_id, user_id, limit, offset),
+#                 )
+
+#             rows = cursor.fetchall()
+
+#             notifications = [
+#                 {
+#                     "notification_id": row[0],
+#                     "title": row[1],
+#                     "message": row[2],
+#                     "is_read": row[3],
+#                     "created_at": row[4],
+#                     "form_id": row[5],
+#                     "form_title": row[6],
+#                     "access_type": row[7],
+#                 }
+#                 for row in rows
+#             ]
 
         return {
             "notifications": notifications,

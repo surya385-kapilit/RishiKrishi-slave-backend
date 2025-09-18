@@ -737,14 +737,15 @@ class FormSubmissions:
                     # Notify admins
                     cursor.execute(
                         """
-                        INSERT INTO notifications (user_id,form_id, title, message, created_at, created_by)
-                        VALUES (%s,%s, 'Flag Raised', %s, %s, %s)
+                        INSERT INTO notifications (user_id,form_id, title, message, created_at, created_by,submission_id)
+                        VALUES (%s,%s, 'Flag Raised', %s, %s, %s, %s)
                         """,
                         (   form_created_by,   # or admin_id (loop over admins if needed)
                              form_id,
                             f"'{flagger_name}' raised a flag on '{form_name}' form.",
                             datetime.now(),
                             flagged_by,
+                            submission_id
                         ),
                     )
 
@@ -752,8 +753,8 @@ class FormSubmissions:
                     # Notify submission owner
                     cursor.execute(
                         """
-                        INSERT INTO notifications (user_id,form_id, title, message, created_at, created_by)
-                        VALUES (%s, %s,'Flag {status}', %s, %s, %s)
+                        INSERT INTO notifications (user_id,form_id, title, message, created_at, created_by,submission_id)
+                        VALUES (%s, %s,'Flag {status}', %s, %s, %s, %s)
                         """.format(status=flag_status.capitalize()),
                         (
                             submission_owner,
@@ -761,6 +762,7 @@ class FormSubmissions:
                             f"Your submission for '{form_name}' was {flag_status} by {flagger_name}",
                             datetime.now(),
                             flagged_by,
+                            submission_id
                         ),
                     )
 
@@ -770,79 +772,3 @@ class FormSubmissions:
                 # "flagged_by": flagged_by,
                 # "notifications_created": notifications_created,
             }
-
-
-# inside FormSubmissions class
-    async def export_submissions(
-        self,
-        form_id: Optional[str] = None,
-        task_id: Optional[str] = None,
-        submitted_by: Optional[str] = None,
-        flagged: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ):
-        base_query = """
-            SELECT fs.submission_id, fs.form_id, u.full_name AS submitted_by,
-                fs.submitted_at, fs.flagged, t.task_id, t.name, f.title
-            FROM form_submissions fs
-            JOIN users u ON fs.submitted_by = u.user_id
-            JOIN form f ON fs.form_id = f.form_id
-            JOIN task t ON f.task_id = t.task_id
-            WHERE 1=1
-        """
-        params = []
-
-        if form_id:
-            base_query += " AND fs.form_id = %s"
-            params.append(str(form_id))
-
-        if task_id:
-            base_query += " AND t.task_id = %s"
-            params.append(str(task_id))
-
-        if submitted_by:
-            base_query += " AND fs.submitted_by = %s"
-            params.append(str(submitted_by))
-
-        flagged = flagged.lower() if flagged else None
-        if flagged:
-            if flagged not in ['raised', 'approved', 'rejected', 'none']:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid flagged value. Must be 'raised', 'approved', 'rejected', or 'none'."
-                )
-            base_query += " AND fs.flagged = %s"
-            params.append(flagged)
-
-        if start_date:
-            start_date_obj = datetime.strptime(start_date, "%d-%m-%Y").date()
-            base_query += " AND DATE(fs.submitted_at) >= %s"
-            params.append(str(start_date_obj))
-
-        if end_date:
-            end_date_obj = datetime.strptime(end_date, "%d-%m-%Y").date()
-            base_query += " AND DATE(fs.submitted_at) <= %s"
-            params.append(str(end_date_obj))
-
-        final_query = base_query + " ORDER BY fs.submitted_at DESC"
-
-        with get_db_connection(self.schema_id) as cursor:
-            cursor.execute(final_query, tuple(params))
-            rows = cursor.fetchall()
-
-        submissions = []
-        for row in rows:
-            submission_id, form_id, submitted_by_name, submitted_at, flagged, task_id, task_name, form_title = row
-            submissions.append({
-                "submission_id": submission_id,
-                "task_id": task_id,
-                "task_name": task_name,
-                "form_id": form_id,
-                "form_title": form_title,
-                "submitted_by": submitted_by_name,
-                "submitted_at": submitted_at,
-                "flagged": flagged
-            })
-
-        return submissions
