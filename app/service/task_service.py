@@ -148,32 +148,109 @@ class TaskService:
             return tasks  
 
     
-    # get all tasks with pagination
-    def get_all_tasks(self, user_id: uuid.UUID, page: int = 0, limit: int = 10) -> dict[str, any]:
-        offset = page * limit
-        with get_db_connection(self.schema_id) as cursor:
-            # Count total tasks for this user
-            cursor.execute(
-                "SELECT COUNT(*) FROM task WHERE created_by = %s", (str(user_id),)
-            )
-            total_count = cursor.fetchone()[0]
-            total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
+    # # get all tasks with pagination
+        # def get_all_tasks(self, user_id: uuid.UUID, page: int = 0, limit: int = 10) -> dict[str, any]:
+        #     offset = page * limit
+        #     with get_db_connection(self.schema_id) as cursor:
+        #         # Count total tasks for this user
+        #         cursor.execute(
+        #             "SELECT COUNT(*) FROM task WHERE created_by = %s", (str(user_id),)
+        #         )
+        #         total_count = cursor.fetchone()[0]
+        #         total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
 
-            # Fetch tasks with pagination
-            cursor.execute(
-                """
-                SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name, 
-                   t.created_at, COUNT(f.form_id) AS form_count
-            FROM task t
-            JOIN users u ON t.created_by = u.user_id
-            LEFT JOIN form f ON t.task_id = f.task_id
-            WHERE t.created_by = %s
-            GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
-            ORDER BY t.created_at DESC
-            LIMIT %s OFFSET %s
-                """,
-                (str(user_id), limit, offset),
-            )
+        #         # Fetch tasks with pagination
+        #         cursor.execute(
+        #             """
+        #             SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name, 
+        #                t.created_at, COUNT(f.form_id) AS form_count
+        #         FROM task t
+        #         JOIN users u ON t.created_by = u.user_id
+        #         LEFT JOIN form f ON t.task_id = f.task_id
+        #         WHERE t.created_by = %s
+        #         GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+        #         ORDER BY t.created_at DESC
+        #         LIMIT %s OFFSET %s
+        #             """,
+        #             (str(user_id), limit, offset),
+        #         )
+        #         rows = cursor.fetchall()
+        #         tasks = [
+        #             TaskResponse(
+        #                 task_id=row[0],
+        #                 name=row[1],
+        #                 description=row[2],
+        #                 created_by=row[3],
+        #                 created_at=row[4],
+        #                 form_count=row[5]
+        #             )
+        #             for row in rows
+        #         ]
+
+        #         # Return structured response
+        #         return {
+        #             "page": page,
+        #             "limit": limit,
+        #             "total_tasks": total_count,
+        #             "total_pages": total_pages,
+        #             "tasks": tasks,
+        #         }
+    # get all tasks with pagination (works for both admin and users)
+    def get_all_tasks(self, user_id: uuid.UUID, role: str, page: int = 0, limit: int = 10) -> dict[str, any]:
+        offset = page * limit
+
+        with get_db_connection(self.schema_id) as cursor:
+            if role.lower() == "admin":
+                # Admin: tasks created by self
+                cursor.execute(
+                    "SELECT COUNT(*) FROM task WHERE created_by = %s", (str(user_id),)
+                )
+                total_count = cursor.fetchone()[0]
+
+                cursor.execute(
+                    """
+                    SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name,
+                        t.created_at, COUNT(f.form_id) AS form_count
+                    FROM task t
+                    JOIN users u ON t.created_by = u.user_id
+                    LEFT JOIN form f ON t.task_id = f.task_id
+                    WHERE t.created_by = %s
+                    GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+                    ORDER BY t.created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (str(user_id), limit, offset),
+                )
+            else:
+                # Non-admin: tasks where user has form access
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT t.task_id)
+                    FROM task t
+                    JOIN form f ON t.task_id = f.task_id
+                    JOIN form_access fa ON f.form_id = fa.form_id
+                    WHERE fa.user_id = %s OR fa.user_id IS NULL
+                    """,
+                    (str(user_id),)
+                )
+                total_count = cursor.fetchone()[0]
+
+                cursor.execute(
+                    """
+                    SELECT DISTINCT t.task_id, t.name, t.description, u.full_name AS created_by_name,
+                                    t.created_at, COUNT(f.form_id) AS form_count
+                    FROM task t
+                    JOIN users u ON t.created_by = u.user_id
+                    JOIN form f ON t.task_id = f.task_id
+                    JOIN form_access fa ON f.form_id = fa.form_id
+                    WHERE fa.user_id = %s OR fa.user_id IS NULL
+                    GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+                    ORDER BY t.created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (str(user_id), limit, offset),
+                )
+
             rows = cursor.fetchall()
             tasks = [
                 TaskResponse(
@@ -187,7 +264,7 @@ class TaskService:
                 for row in rows
             ]
 
-            # Return structured response
+            total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
             return {
                 "page": page,
                 "limit": limit,
@@ -195,6 +272,8 @@ class TaskService:
                 "total_pages": total_pages,
                 "tasks": tasks,
             }
+
+
 
     # delete task by task_id
     def delete_task(self, task_id: uuid.UUID, user_id: uuid.UUID) -> bool:

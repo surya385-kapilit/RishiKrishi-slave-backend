@@ -71,6 +71,8 @@ def create_form(request_data: CreateFormRequest, request: Request):
             "created_at": created_form.created_at
             # "access": access_result or {"message": "No access assigned"},
         }
+    except HTTPException as he:
+        raise he
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -201,29 +203,44 @@ def get_forms_list_by_task(task_id: str, request: Request):
 
 
 # Get forms by task with pagination
+# @form_router.get("/tasks/{task_id}/forms", response_model=PaginatedFormsResponse)
+# def get_forms_by_task(task_id: str, request: Request, page: int = 1, limit: int = 10):
+#     user_payload = request.state.user
+#     role = user_payload.get("role")
+
+#     if not user_payload:
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+
+#     schema_id = user_payload.get("schema_id")
+#     if not schema_id:
+#         raise HTTPException(status_code=400, detail="Missing schema_id in token")
+
+#     if not role or role.lower() != "admin":
+#         raise HTTPException(status_code=403, detail="Unauthorized user")
+
+#     service = FormService(schema_id)
+#     try:
+#         return service.get_forms_by_task(task_id, page=page, limit=limit)
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+
 @form_router.get("/tasks/{task_id}/forms", response_model=PaginatedFormsResponse)
 def get_forms_by_task(task_id: str, request: Request, page: int = 1, limit: int = 10):
     user_payload = request.state.user
-    role = user_payload.get("role")
-
     if not user_payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     schema_id = user_payload.get("schema_id")
-    if not schema_id:
-        raise HTTPException(status_code=400, detail="Missing schema_id in token")
+    user_id = user_payload.get("user_id") or user_payload.get("sub")
+    role = user_payload.get("role")
 
-    if not role or role.lower() != "admin":
-        raise HTTPException(status_code=403, detail="Unauthorized user")
+    if not schema_id or not user_id or not role:
+        raise HTTPException(status_code=400, detail="Missing required fields")
 
     service = FormService(schema_id)
-    try:
-        return service.get_forms_by_task(task_id, page=page, limit=limit)
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+    return service.get_forms_by_task(task_id, str(user_id), role, page=page, limit=limit)
 
 
 # DELETE form

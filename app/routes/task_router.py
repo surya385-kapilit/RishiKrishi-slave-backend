@@ -78,12 +78,29 @@ def get_tasks_list(request: Request):
 
     return tasks
 
+# # get all tasks
+@task_router.get("/all", response_model=PaginatedTasksResponse)
+def get_all_tasks(request: Request, page: int = 0, limit: int = 10):
+    user_payload = request.state.user
+    if not user_payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    schema_id = user_payload.get("schema_id")
+    user_id = user_payload.get("user_id") or user_payload.get("sub")
+    role = user_payload.get("role")
+
+    if not schema_id or not user_id or not role:
+        raise HTTPException(status_code=400, detail="Missing required fields")
+
+    service = TaskService(schema_id)
+    return service.get_all_tasks(uuid.UUID(user_id), role, page=page, limit=limit)
 
 
-# @task_router.get("/list", response_model=List[TaskListResponse])
-# def get_tasks_list(request: Request):
+# @task_router.get("/all", response_model=PaginatedTasksResponse)
+# def get_all_tasks(request: Request, page: int = 1, limit: int = 10):
 #     user_payload = request.state.user
 #     role = user_payload.get("role")
+
 #     if not user_payload:
 #         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -97,29 +114,7 @@ def get_tasks_list(request: Request):
 #         raise HTTPException(status_code=403, detail="Unauthorized user")
 
 #     service = TaskService(schema_id)
-#     tasks = service.get_tasks_list(uuid.UUID(user_id))
-#     return tasks
-
-# get all tasks
-@task_router.get("/all", response_model=PaginatedTasksResponse)
-def get_all_tasks(request: Request, page: int = 1, limit: int = 10):
-    user_payload = request.state.user
-    role = user_payload.get("role")
-
-    if not user_payload:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    schema_id = user_payload.get("schema_id")
-    user_id = user_payload.get("user_id") or user_payload.get("sub")
-
-    if not schema_id or not user_id:
-        raise HTTPException(status_code=400, detail="Missing user_id or schema_id")
-
-    if not role or role.lower() != "admin":
-        raise HTTPException(status_code=403, detail="Unauthorized user")
-
-    service = TaskService(schema_id)
-    return service.get_all_tasks(uuid.UUID(user_id), page=page, limit=limit)
+#     return service.get_all_tasks(uuid.UUID(user_id), page=page, limit=limit)
 
 
 #get task by id

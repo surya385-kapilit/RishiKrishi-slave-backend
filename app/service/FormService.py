@@ -417,35 +417,116 @@ class FormService:
             for f in forms
         ]
 
-    # Get forms by task with pagination
-    def get_forms_by_task(self, task_id: str, page: int = 0, limit: int = 10) -> dict:
-        offset = page * limit
-        with get_db_connection(self.schema_id) as cursor:
-            # Check if task exists
-            cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (str(task_id),))
-            task_exists = cursor.fetchone()
-            if not task_exists:
-                raise HTTPException(status_code=404, detail="Task not found")
-            # Get total count for pagination
-            cursor.execute(
-                "SELECT COUNT(*) FROM form WHERE task_id = %s",
-                (str(task_id),),
-            )
-            total_count = cursor.fetchone()[0]
-            total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
+    # # Get forms by task with pagination
+    # def get_forms_by_task(self, task_id: str, page: int = 0, limit: int = 10) -> dict:
+    #     offset = page * limit
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         # Check if task exists
+    #         cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (str(task_id),))
+    #         task_exists = cursor.fetchone()
+    #         if not task_exists:
+    #             raise HTTPException(status_code=404, detail="Task not found")
+    #         # Get total count for pagination
+    #         cursor.execute(
+    #             "SELECT COUNT(*) FROM form WHERE task_id = %s",
+    #             (str(task_id),),
+    #         )
+    #         total_count = cursor.fetchone()[0]
+    #         total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
 
-            #  Fetch paginated forms
-            cursor.execute(
-                """
-                SELECT f.form_id, f.task_id, f.title, f.description, u.full_name AS created_by_name, f.created_at ,f.is_active
-                FROM form f
-                JOIN users u ON f.created_by = u.user_id
-                WHERE f.task_id = %s
-                ORDER BY f.created_at DESC
-                LIMIT %s OFFSET %s
-                """,
-                (str(task_id), limit, offset),
-            )
+    #         #  Fetch paginated forms
+    #         cursor.execute(
+    #             """
+    #             SELECT f.form_id, f.task_id, f.title, f.description, u.full_name AS created_by_name, f.created_at ,f.is_active
+    #             FROM form f
+    #             JOIN users u ON f.created_by = u.user_id
+    #             WHERE f.task_id = %s
+    #             ORDER BY f.created_at DESC
+    #             LIMIT %s OFFSET %s
+    #             """,
+    #             (str(task_id), limit, offset),
+    #         )
+    #         forms = cursor.fetchall()
+
+    #     form_list = [
+    #         GetAllFormsResponse(
+    #             form_id=f[0],
+    #             task_id=f[1],
+    #             title=f[2],
+    #             description=f[3],
+    #             created_by=f[4],
+    #             created_at=f[5],
+    #             is_active=f[6],
+    #         )
+    #         for f in forms
+    #     ]
+
+    #     return {
+    #         "page": page,
+    #         "limit": limit,
+    #         "total_forms": total_count,
+    #         "total_pages": total_pages,
+    #         "forms": form_list,
+    #     }
+
+    # Get forms by task with pagination (admin: all, user: only assigned)
+    def get_forms_by_task(self, task_id: str, user_id: str, role: str, page: int = 1, limit: int = 10) -> dict:
+        offset = (page - 1) * limit if page > 0 else 0
+
+        with get_db_connection(self.schema_id) as cursor:
+            # ✅ Check if task exists
+            cursor.execute("SELECT 1 FROM task WHERE task_id = %s", (task_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Task not found")
+
+            if role.lower() == "admin":
+                # ✅ Admin: Count all forms
+                cursor.execute("SELECT COUNT(*) FROM form WHERE task_id = %s", (task_id,))
+                total_count = cursor.fetchone()[0]
+
+                # ✅ Admin: Fetch all forms in task
+                cursor.execute(
+                    """
+                    SELECT f.form_id, f.task_id, f.title, f.description, u.full_name AS created_by_name,
+                        f.created_at, f.is_active
+                    FROM form f
+                    JOIN users u ON f.created_by = u.user_id
+                    WHERE f.task_id = %s
+                    ORDER BY f.created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (task_id, limit, offset),
+                )
+            else:
+                # ✅ User: Count only assigned forms
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT f.form_id)
+                    FROM form f
+                    JOIN form_access fa ON f.form_id = fa.form_id
+                    WHERE f.task_id = %s
+                    AND fa.user_id = %s
+                    """,
+                    (task_id, user_id),
+                )
+                total_count = cursor.fetchone()[0]
+
+                # ✅ User: Fetch only assigned forms
+                cursor.execute(
+                    """
+                    SELECT DISTINCT f.form_id, f.task_id, f.title, f.description, u.full_name AS created_by_name,
+                                    f.created_at, f.is_active
+                    FROM form f
+                    JOIN users u ON f.created_by = u.user_id
+                    JOIN form_access fa ON f.form_id = fa.form_id
+                    WHERE f.task_id = %s
+                    AND fa.user_id = %s
+                    ORDER BY f.created_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (task_id, user_id, limit, offset),
+                )
+
             forms = cursor.fetchall()
 
         form_list = [
@@ -461,6 +542,7 @@ class FormService:
             for f in forms
         ]
 
+        total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
         return {
             "page": page,
             "limit": limit,
@@ -468,6 +550,7 @@ class FormService:
             "total_pages": total_pages,
             "forms": form_list,
         }
+
 
     # update status of the form like is_active status
     def update_form_status(self, form_id: str, updated_by: str):

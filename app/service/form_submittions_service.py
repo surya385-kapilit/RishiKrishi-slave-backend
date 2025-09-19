@@ -277,9 +277,14 @@ class FormSubmissions:
 
             # Update modified timestamp
             cursor.execute(
-                "UPDATE form_submissions SET submitted_at = NOW() WHERE submission_id = %s",
-                (submission_id,),
-            )
+                        """
+                        UPDATE form_submissions 
+                        SET submitted_at = NOW(),
+                            flagged = 'none'
+                        WHERE submission_id = %s
+                        """,
+                        (submission_id,),
+                    )
 
         return {
             "message": "Form updated successfully",
