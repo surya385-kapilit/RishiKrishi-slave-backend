@@ -75,3 +75,14 @@ class PresignedUrlResponse(BaseModel):
     expiryHours: int
     method: str
     message: str
+
+# Request model for export endpoint
+class ExportRequest(BaseModel):
+    form_id: Optional[str] = None
+    task_id: Optional[str] = None
+    submitted_by: Optional[str] = None
+    flagged: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    page: int = 0
+    limit: int = 10

@@ -2,8 +2,9 @@ import json
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
-from app.Models.form_submittions import FlagRequest, FormBySubmissionResponse, FormSubmissionRequest, FormSubmissionResponse, FormUpdateRequest, FormUpdateResponse, PresignedUrlRequest, PresignedUrlResponse
+from app.Models.form_submittions import ExportRequest, FlagRequest, FormBySubmissionResponse, FormSubmissionRequest, FormSubmissionResponse, FormUpdateRequest, FormUpdateResponse, PresignedUrlRequest, PresignedUrlResponse
 from app.configuration.s3service import S3Service
 from app.service.FormService import FormService
 from app.service.form_submittions_service import FormSubmissions
@@ -384,3 +385,103 @@ async def generate_upload_presigned_urls(
     except Exception as e:
         logger.error(f"Error generating presigned URLs: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@form_submissions_router.post("/export")
+async def export_submissions(
+    request: Request,
+    export_request: ExportRequest
+):
+    user_payload = request.state.user
+    if not user_payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    schema_id = user_payload.get("schema_id")
+    role = user_payload.get("role")
+    user_id_token = user_payload.get("sub")
+
+    if not schema_id:
+        raise HTTPException(status_code=400, detail="Missing schema_id in token")
+
+    # Non-admins: restrict to their own submissions
+    if role.lower() != "admin":
+        if export_request.submitted_by and export_request.submitted_by != user_id_token:
+            raise HTTPException(status_code=403, detail="User not authorized to access this resource")
+        export_request.submitted_by = user_id_token
+
+    service = FormSubmissions(schema_id)
+
+    try:
+        # Fetch submissions with detailed field values + pagination metadata
+        submissions_response = await service.export_submissions(
+            form_id=export_request.form_id,
+            task_id=export_request.task_id,
+            submitted_by=export_request.submitted_by,
+            flagged=export_request.flagged,
+            start_date=export_request.start_date,
+            end_date=export_request.end_date,
+            page=export_request.page,
+            limit=export_request.limit,
+            is_admin=(role.lower() == "admin")
+        )
+
+        submissions = submissions_response["submissions"]
+
+        # Transform into consistent task/form/submission structure
+        tasks_result = []
+        task_map = {}
+
+        for submission in submissions:
+            task_id = submission["task_id"]
+            task_name = submission["task_name"]
+            form_id = submission["form_id"]
+            form_title = submission["form_title"]
+
+            # Ensure task exists
+            if task_id not in task_map:
+                task_obj = {
+                    "task_id": task_id,
+                    "task_name": task_name,
+                    "forms": []
+                }
+                task_map[task_id] = task_obj
+                tasks_result.append(task_obj)
+
+            task_obj = task_map[task_id]
+
+            # Ensure form exists under this task
+            form_obj = next((f for f in task_obj["forms"] if f["form_id"] == form_id), None)
+            if not form_obj:
+                form_obj = {
+                    "form_id": form_id,
+                    "form_title": form_title,
+                    "submissions": []
+                }
+                task_obj["forms"].append(form_obj)
+
+            # Add submission
+            form_obj["submissions"].append({
+                "submission_id": submission["submission_id"],
+                "submitted_by": submission["submitted_by"],
+                "submitted_at": submission["submitted_at"],
+                "flagged": submission["flagged"],
+                "field_values": [
+                    {"field_name": f["field_name"], "value": f["value"]}
+                    for f in submission["field_values"]
+                ]
+            })
+
+        # Merge pagination metadata + tasks
+        return {
+            "page": submissions_response["page"],
+            "limit": submissions_response["limit"],
+            "total_submissions": submissions_response["total_submissions"],
+            "total_pages": submissions_response["total_pages"],
+            "tasks": tasks_result
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error exporting submissions: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))

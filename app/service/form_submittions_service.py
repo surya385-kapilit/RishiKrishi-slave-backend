@@ -777,3 +777,455 @@ class FormSubmissions:
                 # "flagged_by": flagged_by,
                 # "notifications_created": notifications_created,
             }
+
+
+    # async def export_submissions(
+    #         self,
+    #         form_id: Optional[str] = None,
+    #         task_id: Optional[str] = None,
+    #         submitted_by: Optional[str] = None,
+    #         flagged: Optional[str] = None,
+    #         start_date: Optional[str] = None,
+    #         end_date: Optional[str] = None,
+    #         page: int = 0,
+    #         limit: int = 10,
+    #         is_admin: bool = False
+    #     ):
+    #         offset = page * limit
+    #         base_query = """
+    #             SELECT fs.submission_id, fs.form_id, u.full_name AS submitted_by,
+    #                 fs.submitted_at, fs.flagged, t.task_id, t.name, f.title,
+    #                 fsv.field_id, ff.name AS field_name, fsv.value_text
+    #             FROM form_submissions fs
+    #             JOIN users u ON fs.submitted_by = u.user_id
+    #             JOIN form f ON fs.form_id = f.form_id
+    #             JOIN task t ON f.task_id = t.task_id
+    #             LEFT JOIN form_field_values fsv ON fs.submission_id = fsv.submission_id
+    #             LEFT JOIN form_fields ff ON fsv.field_id = ff.field_id
+    #             WHERE 1=1
+    #         """
+    #         params = []
+
+    #         # Apply filters
+    #         if form_id:
+    #             base_query += " AND fs.form_id = %s"
+    #             params.append(str(form_id))
+
+    #         if task_id:
+    #             base_query += " AND t.task_id = %s"
+    #             params.append(str(task_id))
+
+    #         if submitted_by:
+    #             base_query += " AND fs.submitted_by = %s"
+    #             params.append(str(submitted_by))
+
+    #         if flagged:
+    #             flagged = flagged.lower()
+    #             if flagged not in ['raised', 'approved', 'rejected', 'none']:
+    #                 raise HTTPException(status_code=400, detail="Invalid flagged value. Must be 'raised', 'approved', 'rejected', or 'none'.")
+    #             base_query += " AND fs.flagged = %s"
+    #             params.append(flagged)
+
+    #         if start_date:
+    #             start_date_obj = datetime.strptime(start_date, "%d-%m-%Y").date()
+    #             base_query += " AND DATE(fs.submitted_at) >= %s"
+    #             params.append(str(start_date_obj))
+
+    #         if end_date:
+    #             end_date_obj = datetime.strptime(end_date, "%d-%m-%Y").date()
+    #             base_query += " AND DATE(fs.submitted_at) <= %s"
+    #             params.append(str(end_date_obj))
+
+    #         # Sorting + pagination
+    #         final_query = base_query + " ORDER BY fs.submitted_at DESC LIMIT %s OFFSET %s"
+    #         params.extend([limit, offset])
+
+    #         with get_db_connection(self.schema_id) as cursor:
+    #             cursor.execute(final_query, tuple(params))
+    #             rows = cursor.fetchall()
+
+    #         # Organize submissions by submission_id
+    #         submissions_map = {}
+    #         for row in rows:
+    #             (submission_id, form_id, submitted_by_name, submitted_at, flagged,
+    #             task_id, task_name, form_title, field_id, field_name, value_text) = row
+
+    #             if submission_id not in submissions_map:
+    #                 submissions_map[submission_id] = {
+    #                     "submission_id": submission_id,
+    #                     "form_id": form_id,
+    #                     "form_title": form_title,
+    #                     "submitted_by": submitted_by_name,
+    #                     "submitted_at": submitted_at,
+    #                     "flagged": flagged,
+    #                     "task_id": task_id,
+    #                     "task_name": task_name,
+    #                     "field_values": []
+    #                 }
+
+    #             if field_id and field_name and value_text:
+    #                 parsed_value = value_text
+    #                 try:
+    #                     parsed_value = json.loads(value_text)
+    #                 except (json.JSONDecodeError, TypeError):
+    #                     pass
+    #                 submissions_map[submission_id]["field_values"].append({
+    #                     "field_id": field_id,
+    #                     "field_name": field_name,
+    #                     "value": parsed_value
+    #                 })
+
+    #         return list(submissions_map.values())
+    
+# #--------------export submissions with filters and pagination-----------------
+#     async def export_submissions(
+#         self,
+#         form_id: Optional[str] = None,
+#         task_id: Optional[str] = None,
+#         submitted_by: Optional[str] = None,
+#         flagged: Optional[str] = None,
+#         start_date: Optional[str] = None,
+#         end_date: Optional[str] = None,
+#         page: int = 0,
+#         limit: int = 10,
+#         is_admin: bool = False
+#     ):
+#         offset = page * limit
+#         base_query = """
+#             SELECT fs.submission_id, fs.form_id, u.full_name AS submitted_by,
+#                    fs.submitted_at, fs.flagged, t.task_id, t.name AS task_name, f.title AS form_title,
+#                    fsv.field_id, ff.name AS field_name, fsv.value_text
+#             FROM form_submissions fs
+#             JOIN users u ON fs.submitted_by = u.user_id
+#             JOIN form f ON fs.form_id = f.form_id
+#             JOIN task t ON f.task_id = t.task_id
+#             LEFT JOIN form_field_values fsv ON fs.submission_id = fsv.submission_id
+#             LEFT JOIN form_fields ff ON fsv.field_id = ff.field_id
+#             WHERE 1=1
+#         """
+#         params = []
+
+#         # Apply filters
+#         if form_id:
+#             base_query += " AND fs.form_id = %s"
+#             params.append(str(form_id))
+
+#         if task_id:
+#             base_query += " AND t.task_id = %s"
+#             params.append(str(task_id))
+
+#         if submitted_by:
+#             base_query += " AND fs.submitted_by = %s"
+#             params.append(str(submitted_by))
+
+#         if flagged:
+#             flagged = flagged.lower()
+#             if flagged not in ['raised', 'approved', 'rejected', 'none']:
+#                 raise HTTPException(status_code=400, detail="Invalid flagged value. Must be 'raised', 'approved', 'rejected', or 'none'.")
+#             base_query += " AND fs.flagged = %s"
+#             params.append(flagged)
+
+#         if start_date:
+#             start_date_obj = datetime.strptime(start_date, "%d-%m-%Y").date()
+#             base_query += " AND DATE(fs.submitted_at) >= %s"
+#             params.append(str(start_date_obj))
+
+#         if end_date:
+#             end_date_obj = datetime.strptime(end_date, "%d-%m-%Y").date()
+#             base_query += " AND DATE(fs.submitted_at) <= %s"
+#             params.append(str(end_date_obj))
+
+#         # Sorting + pagination
+#         final_query = base_query + " ORDER BY fs.submitted_at DESC LIMIT %s OFFSET %s"
+#         params.extend([limit, offset])
+
+#         with get_db_connection(self.schema_id) as cursor:
+#             cursor.execute(final_query, tuple(params))
+#             rows = cursor.fetchall()
+
+#         # Organize submissions by submission_id
+#         submissions_map = {}
+#         for row in rows:
+#             (submission_id, form_id, submitted_by_name, submitted_at, flagged,
+#              task_id, task_name, form_title, field_id, field_name, value_text) = row
+
+#             if submission_id not in submissions_map:
+#                 submissions_map[submission_id] = {
+#                     "submission_id": submission_id,
+#                     "form_id": form_id,
+#                     "form_title": form_title,
+#                     "submitted_by": submitted_by_name,
+#                     "submitted_at": submitted_at,
+#                     "flagged": flagged,
+#                     "task_id": task_id,
+#                     "task_name": task_name,
+#                     "field_values": []
+#                 }
+
+#             if field_id and field_name and value_text:
+#                 parsed_value = value_text
+#                 try:
+#                     parsed_value = json.loads(value_text)
+#                 except (json.JSONDecodeError, TypeError):
+#                     pass
+#                 submissions_map[submission_id]["field_values"].append({
+#                     "field_id": field_id,
+#                     "field_name": field_name,
+#                     "value": parsed_value
+#                 })
+
+#         return list(submissions_map.values())
+
+# async def export_submissions(
+#     self,
+#     form_id: Optional[str] = None,
+#     task_id: Optional[str] = None,
+#     submitted_by: Optional[str] = None,
+#     flagged: Optional[str] = None,
+#     start_date: Optional[str] = None,
+#     end_date: Optional[str] = None,
+#     page: int = 0,
+#     limit: int = 10,
+#     is_admin: bool = False
+# ):
+#     offset = page * limit
+
+#     # ---------- Step 1: Get limited submission_ids ----------
+#     base_query = """
+#         SELECT fs.submission_id
+#         FROM form_submissions fs
+#         JOIN users u ON fs.submitted_by = u.user_id
+#         JOIN form f ON fs.form_id = f.form_id
+#         JOIN task t ON f.task_id = t.task_id
+#         WHERE 1=1
+#     """
+#     params = []
+
+#     if form_id:
+#         base_query += " AND fs.form_id = %s"
+#         params.append(str(form_id))
+
+#     if task_id:
+#         base_query += " AND t.task_id = %s"
+#         params.append(str(task_id))
+
+#     if submitted_by:
+#         base_query += " AND fs.submitted_by = %s"
+#         params.append(str(submitted_by))
+
+#     if flagged:
+#         flagged = flagged.lower()
+#         if flagged not in ['raised', 'approved', 'rejected', 'none']:
+#             raise HTTPException(status_code=400, detail="Invalid flagged value.")
+#         base_query += " AND fs.flagged = %s"
+#         params.append(flagged)
+
+#     if start_date:
+#         start_date_obj = datetime.strptime(start_date, "%d-%m-%Y").date()
+#         base_query += " AND DATE(fs.submitted_at) >= %s"
+#         params.append(str(start_date_obj))
+
+#     if end_date:
+#         end_date_obj = datetime.strptime(end_date, "%d-%m-%Y").date()
+#         base_query += " AND DATE(fs.submitted_at) <= %s"
+#         params.append(str(end_date_obj))
+
+#     # Only paginate submission_ids
+#     base_query += " ORDER BY fs.submitted_at DESC LIMIT %s OFFSET %s"
+#     params.extend([limit, offset])
+
+#     with get_db_connection(self.schema_id) as cursor:
+#         cursor.execute(base_query, tuple(params))
+#         submission_ids = [row[0] for row in cursor.fetchall()]
+
+#     if not submission_ids:
+#         return []
+
+#     # ---------- Step 2: Fetch all details for those submission_ids ----------
+#     detail_query = """
+#         SELECT fs.submission_id, fs.form_id, u.full_name AS submitted_by,
+#                fs.submitted_at, fs.flagged, t.task_id, t.name AS task_name, f.title AS form_title,
+#                fsv.field_id, ff.name AS field_name, fsv.value_text
+#         FROM form_submissions fs
+#         JOIN users u ON fs.submitted_by = u.user_id
+#         JOIN form f ON fs.form_id = f.form_id
+#         JOIN task t ON f.task_id = t.task_id
+#         LEFT JOIN form_field_values fsv ON fs.submission_id = fsv.submission_id
+#         LEFT JOIN form_fields ff ON fsv.field_id = ff.field_id
+#         WHERE fs.submission_id = ANY(%s)
+#         ORDER BY fs.submitted_at DESC
+#     """
+
+#     with get_db_connection(self.schema_id) as cursor:
+#         cursor.execute(detail_query, (submission_ids,))
+#         rows = cursor.fetchall()
+
+#     # ---------- Step 3: Organize ----------
+#     submissions_map = {}
+#     for row in rows:
+#         (submission_id, form_id, submitted_by_name, submitted_at, flagged,
+#          task_id, task_name, form_title, field_id, field_name, value_text) = row
+
+#         if submission_id not in submissions_map:
+#             submissions_map[submission_id] = {
+#                 "submission_id": submission_id,
+#                 "form_id": form_id,
+#                 "form_title": form_title,
+#                 "submitted_by": submitted_by_name,
+#                 "submitted_at": submitted_at,
+#                 "flagged": flagged,
+#                 "task_id": task_id,
+#                 "task_name": task_name,
+#                 "field_values": []
+#             }
+
+#         if field_id and field_name and value_text:
+#             parsed_value = value_text
+#             try:
+#                 parsed_value = json.loads(value_text)
+#             except (json.JSONDecodeError, TypeError):
+#                 pass
+#             submissions_map[submission_id]["field_values"].append({
+#                 "field_id": field_id,
+#                 "field_name": field_name,
+#                 "value": parsed_value
+#             })
+
+#     return list(submissions_map.values())
+
+
+    async def export_submissions(
+        self,
+        form_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        submitted_by: Optional[str] = None,
+        flagged: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        page: int = 0,
+        limit: int = 10,
+        is_admin: bool = False
+    ):
+        offset = page * limit
+
+        # ---------- Step 0: Count total submissions ----------
+        count_query = """
+            SELECT COUNT(*)
+            FROM form_submissions fs
+            JOIN users u ON fs.submitted_by = u.user_id
+            JOIN form f ON fs.form_id = f.form_id
+            JOIN task t ON f.task_id = t.task_id
+            WHERE 1=1
+        """
+        params = []
+
+        if form_id:
+            count_query += " AND fs.form_id = %s"
+            params.append(str(form_id))
+
+        if task_id:
+            count_query += " AND t.task_id = %s"
+            params.append(str(task_id))
+
+        if submitted_by:
+            count_query += " AND fs.submitted_by = %s"
+            params.append(str(submitted_by))
+
+        if flagged:
+            flagged = flagged.lower()
+            if flagged not in ['raised', 'approved', 'rejected', 'none']:
+                raise HTTPException(status_code=400, detail="Invalid flagged value.")
+            count_query += " AND fs.flagged = %s"
+            params.append(flagged)
+
+        if start_date:
+            start_date_obj = datetime.strptime(start_date, "%d-%m-%Y").date()
+            count_query += " AND DATE(fs.submitted_at) >= %s"
+            params.append(str(start_date_obj))
+
+        if end_date:
+            end_date_obj = datetime.strptime(end_date, "%d-%m-%Y").date()
+            count_query += " AND DATE(fs.submitted_at) <= %s"
+            params.append(str(end_date_obj))
+
+        with get_db_connection(self.schema_id) as cursor:
+            cursor.execute(count_query, tuple(params))
+            total_submissions = cursor.fetchone()[0]
+
+        total_pages = (total_submissions + limit - 1) // limit  # ceil division
+
+        # ---------- Step 1: Get limited submission_ids ----------
+        base_query = count_query.replace("SELECT COUNT(*)", "SELECT fs.submission_id")
+        base_query += " ORDER BY fs.submitted_at DESC LIMIT %s OFFSET %s"
+        params_with_limit = params + [limit, offset]
+
+        with get_db_connection(self.schema_id) as cursor:
+            cursor.execute(base_query, tuple(params_with_limit))
+            submission_ids = [row[0] for row in cursor.fetchall()]
+
+        if not submission_ids:
+            return {
+                "page": page,
+                "limit": limit,
+                "total_submissions": total_submissions,
+                "total_pages": total_pages,
+                "submissions": []
+            }
+
+        # ---------- Step 2: Fetch details ----------
+        detail_query = """
+            SELECT fs.submission_id, fs.form_id, u.full_name AS submitted_by,
+                fs.submitted_at, fs.flagged, t.task_id, t.name AS task_name, f.title AS form_title,
+                fsv.field_id, ff.name AS field_name, fsv.value_text
+            FROM form_submissions fs
+            JOIN users u ON fs.submitted_by = u.user_id
+            JOIN form f ON fs.form_id = f.form_id
+            JOIN task t ON f.task_id = t.task_id
+            LEFT JOIN form_field_values fsv ON fs.submission_id = fsv.submission_id
+            LEFT JOIN form_fields ff ON fsv.field_id = ff.field_id
+            WHERE fs.submission_id = ANY(%s::uuid[])
+            ORDER BY fs.submitted_at DESC
+        """
+
+        with get_db_connection(self.schema_id) as cursor:
+            cursor.execute(detail_query, (submission_ids,))
+            rows = cursor.fetchall()
+
+        # ---------- Step 3: Organize ----------
+        submissions_map = {}
+        for row in rows:
+            (submission_id, form_id, submitted_by_name, submitted_at, flagged,
+            task_id, task_name, form_title, field_id, field_name, value_text) = row
+
+            if submission_id not in submissions_map:
+                submissions_map[submission_id] = {
+                    "submission_id": submission_id,
+                    "form_id": form_id,
+                    "form_title": form_title,
+                    "submitted_by": submitted_by_name,
+                    "submitted_at": submitted_at,
+                    "flagged": flagged,
+                    "task_id": task_id,
+                    "task_name": task_name,
+                    "field_values": []
+                }
+
+            if field_id and field_name and value_text:
+                parsed_value = value_text
+                try:
+                    parsed_value = json.loads(value_text)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                submissions_map[submission_id]["field_values"].append({
+                    "field_id": field_id,
+                    "field_name": field_name,
+                    "value": parsed_value
+                })
+
+        return {
+            "page": page,
+            "limit": limit,
+            "total_submissions": total_submissions,
+            "total_pages": total_pages,
+            "submissions": list(submissions_map.values())
+        }
