@@ -71,20 +71,65 @@ class TaskService:
             return cursor.rowcount == 1
     
     # get task by task_id
-    def get_task_by_id(self, task_id: uuid.UUID, user_id: uuid.UUID) -> TaskResponse | None:
+    # def get_task_by_id(self, task_id: uuid.UUID, user_id: uuid.UUID) -> TaskResponse | None:
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         cursor.execute(
+    #             """
+    #             SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name, 
+    #                 t.created_at, COUNT(f.form_id) AS form_count
+    #             FROM task t
+    #             JOIN users u ON t.created_by = u.user_id
+    #             LEFT JOIN form f ON t.task_id = f.task_id
+    #             WHERE t.task_id = %s AND t.created_by = %s
+    #             GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+    #             """,
+    #             (str(task_id), str(user_id)),
+    #         )
+    #         row = cursor.fetchone()
+    #         if row:
+    #             return TaskResponse(
+    #                 task_id=row[0],
+    #                 name=row[1],
+    #                 description=row[2],
+    #                 created_by=row[3],
+    #                 created_at=row[4],
+    #                 form_count=row[5]
+    #             )
+    #         return None
+
+    def get_task_by_id(self, task_id: uuid.UUID, user_id: uuid.UUID, role: str) -> TaskResponse | None:
         with get_db_connection(self.schema_id) as cursor:
-            cursor.execute(
-                """
-                SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name, 
-                    t.created_at, COUNT(f.form_id) AS form_count
-                FROM task t
-                JOIN users u ON t.created_by = u.user_id
-                LEFT JOIN form f ON t.task_id = f.task_id
-                WHERE t.task_id = %s AND t.created_by = %s
-                GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
-                """,
-                (str(task_id), str(user_id)),
-            )
+            if role.lower() == "admin":
+                # Admin: all forms count
+                cursor.execute(
+                    """
+                    SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name,
+                        t.created_at, COUNT(f.form_id) AS form_count
+                    FROM task t
+                    JOIN users u ON t.created_by = u.user_id
+                    LEFT JOIN form f ON t.task_id = f.task_id
+                    WHERE t.task_id = %s
+                    GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+                    """,
+                    (str(task_id),),
+                )
+            else:
+                # Supervisor: only assigned forms count (still show task even if 0)
+                cursor.execute(
+                    """
+                    SELECT t.task_id, t.name, t.description, u.full_name AS created_by_name,
+                        t.created_at, COUNT(DISTINCT f.form_id) AS form_count
+                    FROM task t
+                    JOIN users u ON t.created_by = u.user_id
+                    LEFT JOIN form f ON t.task_id = f.task_id
+                    LEFT JOIN form_access fa 
+                        ON f.form_id = fa.form_id AND fa.user_id = %s
+                    WHERE t.task_id = %s
+                    GROUP BY t.task_id, t.name, t.description, u.full_name, t.created_at
+                    """,
+                    (str(user_id), str(task_id)),
+                )
+
             row = cursor.fetchone()
             if row:
                 return TaskResponse(
@@ -93,9 +138,10 @@ class TaskService:
                     description=row[2],
                     created_by=row[3],
                     created_at=row[4],
-                    form_count=row[5]
+                    form_count=row[5],
                 )
             return None
+
     #get all tasks
     def get_tasks_list(self, user_id: uuid.UUID) -> List[TaskResponse]:  
         with get_db_connection(self.schema_id) as cursor:
