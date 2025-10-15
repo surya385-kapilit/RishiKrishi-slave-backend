@@ -1,5 +1,8 @@
+from math import ceil
 from typing import Any, Dict, Optional
-from app.Models.notification import MarkReadResponse, NotificationCountResponse
+
+from fastapi import HTTPException
+from app.Models.notification import NotificationCountResponse
 from app.configuration.database import get_db_connection
 
 
@@ -12,346 +15,120 @@ class NotificationService:
             # Now count distinct notifications
             cursor.execute(
                 """
-                SELECT COUNT(DISTINCT n.notification_id) AS unread_count
-                FROM notifications n
-                JOIN form_access fa ON n.form_id = fa.form_id
-                JOIN users u ON u.user_id = %s
-                WHERE (n.user_id = %s OR (fa.access_type = 'all' AND u.role <> 'ADMIN'))
-                AND n.is_read = FALSE
-                AND n.notification_id NOT IN (
-                    SELECT notification_id 
-                    FROM notification_reads 
-                    WHERE user_id = %s
-                )
+                select count(user_id) as unread from notifications where is_read=false and user_id= %s
+
                 """,
-                (user_id, user_id, user_id),
+                (user_id,),
             )
             result = cursor.fetchone()
             print("DEBUG → Unread count for user:", user_id, "=", result[0])
             return NotificationCountResponse(user_id=user_id, unread_count=result[0])
 
-    # def mark_as_read(self, notification_id: int, user_id: str):
-    #     with get_db_connection(self.schema_id) as cursor:
-    #         # Step 1: Find form_id and access_type
-    #         cursor.execute(
-    #             """
-    #             SELECT n.form_id, fa.access_type
-    #             FROM notifications n
-    #             LEFT JOIN form_access fa ON n.form_id = fa.form_id
-    #             WHERE n.notification_id = %s
-    #             """,
-    #             (notification_id,),
-    #         )
-    #         row = cursor.fetchone()
-
-    #         if not row:
-    #             return {
-    #                 "notification_id": notification_id,
-    #                 "status": "error",
-    #                 "message": "Notification not found",
-    #             }
-    #         form_id, access_type = row
-
-    #         # Case 1: INDIVIDUAL → directly update notifications
-    #         if access_type == "individual":
-    #             cursor.execute(
-    #                 "UPDATE notifications SET is_read = true WHERE notification_id = %s",
-    #                 (notification_id,),
-    #             )
-    #             return {"status": "success", "message": "Marked as read (INDIVIDUAL)"}
-
-    #         # Case 2: ALL → insert into notification_reads
-    #         if access_type == "all":
-    #             # First check if this user already inserted
-    #             cursor.execute(
-    #                 "SELECT 1 FROM notification_reads WHERE notification_id = %s AND user_id = %s",
-    #                 (notification_id, user_id),
-    #             )
-    #             #if submission id is not null then inset the querie else form
-
-    #             if not cursor.fetchone():
-    #                 cursor.execute(
-    #                     "INSERT INTO notification_reads (notification_id, user_id) VALUES (%s, %s)",
-    #                     (notification_id, user_id),
-    #                 )
-
-    #             # Now check if all non-admin users have read
-    #             cursor.execute(
-    #                 """
-    #                 SELECT COUNT(*) 
-    #                 FROM users u 
-    #                 WHERE u.role != 'ADMIN'
-    #                 """
-    #             )
-    #             total_users = cursor.fetchone()[0]
-
-    #             cursor.execute(
-    #                 """
-    #                 SELECT COUNT(DISTINCT nr.user_id)
-    #                 FROM notification_reads nr
-    #                 JOIN users u ON nr.user_id = u.user_id
-    #                 WHERE nr.notification_id = %s
-    #                 AND u.role != 'ADMIN'
-    #                 """,
-    #                 (notification_id,),
-    #             )
-    #             read_users = cursor.fetchone()[0]
-
-    #             if total_users > 0 and total_users == read_users:
-    #                 # All non-admin users read → update and cleanup
-    #                 cursor.execute(
-    #                     "UPDATE notifications SET is_read = true WHERE notification_id = %s",
-    #                     (notification_id,),
-    #                 )
-    #                 cursor.execute(
-    #                     "DELETE FROM notification_reads WHERE notification_id = %s",
-    #                     (notification_id,),
-    #                 )
-
-    #             # return {"status": "success", "message": "Marked as read (ALL)"}
-    #             return {
-    #                 "notification_id": notification_id,
-    #                 "status": "success",
-    #                 "message": "Marked as read (ALL)",
-    #             }
-    def mark_as_read(self, notification_id: int, user_id: str):
+    def mark_as_read(self, user_id: str):
         with get_db_connection(self.schema_id) as cursor:
-            # Step 1: Find form_id, access_type, and submission_id
-            cursor.execute(
-                """
-                SELECT n.form_id, fa.access_type, n.submission_id
-                FROM notifications n
-                LEFT JOIN form_access fa ON n.form_id = fa.form_id
-                WHERE n.notification_id = %s
-                """,
-                (notification_id,),
-            )
-            row = cursor.fetchone()
-
-            if not row:
-                return {
-                    "notification_id": notification_id,
-                    "status": "error",
-                    "message": "Notification not found",
-                }
-            form_id, access_type, submission_id = row
-
-            # Case 1: INDIVIDUAL → directly update notifications
-            if access_type == "individual":
-                cursor.execute(
-                    "UPDATE notifications SET is_read = true WHERE notification_id = %s",
-                    (notification_id,),
-                )
-                return {"status": "success", "message": "Marked as read (INDIVIDUAL)"}
-
-            # Case 2: ALL → insert into notification_reads only if submission_id is NULL
-            if access_type == "all":
-                if submission_id is "null":
-                    # First check if this user already inserted
-                    cursor.execute(
-                        "SELECT 1 FROM notification_reads WHERE notification_id = %s AND user_id = %s",
-                        (notification_id, user_id),
-                    )
-                    if not cursor.fetchone():
-                        cursor.execute(
-                            "INSERT INTO notification_reads (notification_id, user_id) VALUES (%s, %s)",
-                            (notification_id, user_id),
-                        )
-
-                # Now check if all non-admin users have read
+            # cursor = conn.cursor()
+            try:
+                # ✅ Update only unread notifications for this user
                 cursor.execute(
                     """
-                    SELECT COUNT(*) 
-                    FROM users u 
-                    WHERE u.role != 'ADMIN'
-                    """
-                )
-                total_users = cursor.fetchone()[0]
-
-                cursor.execute(
-                    """
-                    SELECT COUNT(DISTINCT nr.user_id)
-                    FROM notification_reads nr
-                    JOIN users u ON nr.user_id = u.user_id
-                    WHERE nr.notification_id = %s
-                    AND u.role != 'ADMIN'
+                    UPDATE notifications
+                    SET is_read = true
+                    WHERE user_id = %s AND is_read = false
                     """,
-                    (notification_id,),
+                    (user_id,),
                 )
-                read_users = cursor.fetchone()[0]
+                updated_rows = cursor.rowcount  # Number of notifications updated
+                # cursor.commit()
 
-                if total_users > 0 and total_users == read_users:
-                    # All non-admin users read → update and cleanup
-                    cursor.execute(
-                        "UPDATE notifications SET is_read = true WHERE notification_id = %s",
-                        (notification_id,),
-                    )
-                    cursor.execute(
-                        "DELETE FROM notification_reads WHERE notification_id = %s",
-                        (notification_id,),
-                    )
+                if updated_rows > 0:
+                    return {
+                        "status": "success",
+                        "message": f"{updated_rows} notification(s) marked as read",
+                    }
+                else:
+                    return {
+                        "status": "info",
+                        "message": "No unread notifications found",
+                    }
 
-                return {
-                    # "notification_id": notification_id,
-                    "status": "success",
-                    "message": "Marked as read (ALL)",
-                }
+            except Exception as e:
+                # cursor.rollback()
+                raise e
+            finally:
+                cursor.close()
 
-
-
+    # ✅ Get all notifications (read/unread/all) with pagination
     def list_notifications(
-        self, user_id: str, role: str, page: int, limit: int, status: Optional[str]
-    ) -> Dict[str, Any]:
+        self,
+        user_id: str,
+        role: str,
+        page: int,
+        limit: int,
+        status: str = None,
+    ):
         offset = page * limit
 
         with get_db_connection(self.schema_id) as cursor:
-            # --- Count total ---
-            if role.lower() == "admin":
+            try:
                 base_query = """
-                    SELECT COUNT(*) 
-                    FROM notifications n
-                    WHERE n.user_id = %s
-                """
-                params = [user_id]
-                if status == "unread":
-                    base_query += " AND n.is_read = FALSE"
-                elif status == "read":
-                    base_query += " AND n.is_read = TRUE"
-            else:
-                # Non-admin
-                base_query = """
-                    SELECT COUNT(*) 
-                    FROM (
-                        -- individual
-                        SELECT n.notification_id, n.is_read
-                        FROM notifications n
-                        WHERE n.user_id = %s
-
-                        UNION ALL
-
-                        -- all
-                        SELECT n.notification_id,
-                            CASE WHEN EXISTS (
-                                    SELECT 1 FROM notification_reads nr
-                                    WHERE nr.notification_id = n.notification_id
-                                    AND nr.user_id = %s
-                            ) THEN TRUE ELSE FALSE END AS is_read
-                        FROM notifications n
-                        JOIN form_access fa ON fa.form_id = n.form_id
-                        WHERE fa.access_type = 'all'
-                    ) AS combined
-                """
-                params = [user_id, user_id]
-
-                if status == "unread":
-                    base_query += " WHERE combined.is_read = FALSE"
-                elif status == "read":
-                    base_query += " WHERE combined.is_read = TRUE"
-
-            cursor.execute(base_query, params)
-            total_count = cursor.fetchone()[0]
-            total_pages = (total_count + limit - 1) // limit
-
-            # --- Fetch paginated notifications ---
-            # --- Fetch paginated notifications ---
-            if role.lower() == "admin":
-                cursor.execute(
-                    f"""
-                    SELECT 
-                        n.notification_id,
-                        n.title,
-                        n.message,
-                        n.is_read,
-                        n.created_at,
-                        n.form_id,
-                        f.title AS form_title,
-                        'individual' AS access_type,
-                        n.submission_id
+                    SELECT n.notification_id, n.title, n.message, n.is_read, 
+                           n.created_at, n.form_id, f.title AS form_title, 
+                           fa.access_type, n.submission_id
                     FROM notifications n
                     LEFT JOIN form f ON n.form_id = f.form_id
+                    LEFT JOIN form_access fa ON f.form_id = fa.form_id AND fa.user_id = n.user_id
                     WHERE n.user_id = %s
-                    {"AND n.is_read = FALSE" if status == "unread" else ""}
-                    {"AND n.is_read = TRUE" if status == "read" else ""}
-                    ORDER BY created_at DESC
-                    LIMIT %s OFFSET %s;
-                    """,
-                    (user_id, limit, offset),
-                )
-            else:
-                cursor.execute(
-                    f"""
-                    SELECT *
-                    FROM (
-                        -- individual
-                        SELECT 
-                            n.notification_id,
-                            n.title,
-                            n.message,
-                            n.is_read,
-                            n.created_at,
-                            n.form_id,
-                            f.title AS form_title,
-                            'individual' AS access_type,
-                            n.submission_id
-                        FROM notifications n
-                        LEFT JOIN form f ON n.form_id = f.form_id
-                        WHERE n.user_id = %s
+                """
 
-                        UNION ALL
+                params = [user_id]
 
-                        -- all
-                        SELECT 
-                            n.notification_id,
-                            n.title,
-                            n.message,
-                            CASE WHEN EXISTS (
-                                SELECT 1 FROM notification_reads nr
-                                WHERE nr.notification_id = n.notification_id
-                                AND nr.user_id = %s
-                            ) THEN TRUE ELSE FALSE END AS is_read,
-                            n.created_at,
-                            n.form_id,
-                            f.title AS form_title,
-                            'all' AS access_type,
-                            n.submission_id
-                        FROM notifications n
-                        JOIN form_access fa ON fa.form_id = n.form_id
-                        LEFT JOIN form f ON n.form_id = f.form_id
-                        WHERE fa.access_type = 'all'
-                    ) AS combined
-                    { "WHERE combined.is_read = FALSE" if status == "unread" else "" }
-                    { "WHERE combined.is_read = TRUE" if status == "read" else "" }
-                    ORDER BY created_at DESC
-                    LIMIT %s OFFSET %s;
-                    """,
-                    (user_id, user_id, limit, offset),
-                )
+                # ✅ Filter by read/unread
+                if status == "read":
+                    base_query += " AND n.is_read = true"
+                elif status == "unread":
+                    base_query += " AND n.is_read = false"
 
-            rows = cursor.fetchall()   
-            notifications = [
-                {
-                    "notification_id": row[0],
-                    "title": row[1],
-                    "message": row[2],
-                    "is_read": row[3],
-                    "created_at": row[4],
-                    "form_id": row[5],
-                    "form_title": row[6],
-                    "access_type": row[7],
-                    "submission_id": row[8],
-                    "navigation": "submissions" if row[8] else "form",  
+                # ✅ Count total
+                count_query = f"SELECT COUNT(*) FROM ({base_query}) AS total"
+                cursor.execute(count_query, tuple(params))
+                total_count = cursor.fetchone()[0]
+
+                # ✅ Apply pagination
+                base_query += " ORDER BY n.created_at DESC LIMIT %s OFFSET %s"
+                params.extend([limit, offset])
+                cursor.execute(base_query, tuple(params))
+                rows = cursor.fetchall()
+
+                notifications = [
+                    {
+                        "notification_id": row[0],
+                        "title": row[1],
+                        "message": row[2],
+                        "is_read": row[3],
+                        "created_at": row[4],
+                        "form_id": row[5],
+                        "form_title": row[6],
+                        "access_type": row[7],
+                        "submission_id": row[8],
+                    }
+                    for row in rows
+                ]
+
+                total_pages = ceil(total_count / limit) if total_count > 0 else 1
+
+                return {
+                    "notifications": notifications,
+                    "pagination": {
+                        "total_notifications": total_count,
+                        "current_page": page,
+                        "limit": limit,
+                        "total_pages": total_pages,
+                        "next_page": page + 1 if (page + 1) < total_pages else None,
+                        "previous_page": page - 1 if page > 0 else None,
+                    },
                 }
-                for row in rows
-                
-            ]
-        return {
-            "notifications": notifications,
-            "pagination": {
-                "total_notifications": total_count,
-                "current_page": page,
-                "limit": limit,
-                "total_pages": total_pages,
-                "next_page": page < total_pages,
-                "previous_page": page > 1,
-            },
-        }
+
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                cursor.close()

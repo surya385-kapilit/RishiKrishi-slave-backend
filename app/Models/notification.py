@@ -14,9 +14,9 @@ class MarkReadRequest(BaseModel):
 
 
 class MarkReadResponse(BaseModel):
+    notification_id: str
+    status: str
     message: str
-    # notification_id: Optional[uuid.UUID] = None
-    status: Optional[str] = None
 
 
 class NotificationResponse(BaseModel):

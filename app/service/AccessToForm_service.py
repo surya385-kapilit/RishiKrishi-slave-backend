@@ -22,8 +22,6 @@ class FormAccessService:
 
         with get_db_connection(self.schema_id) as cursor:
             try:
-                # conn.autocommit = False
-
                 # ✅ Get admin name for notification
                 cursor.execute(
                     "SELECT full_name FROM users WHERE user_id = %s",
@@ -46,6 +44,7 @@ class FormAccessService:
                 # CASE 1: ACCESS TO ALL USERS
                 # ==============================
                 if access_data.access_type == "all":
+                    # Check if form is already assigned to all users
                     cursor.execute(
                         "SELECT 1 FROM form_access WHERE form_id = %s AND user_id IS NULL",
                         (str(access_data.form_id),),
@@ -53,13 +52,30 @@ class FormAccessService:
                     if cursor.fetchone():
                         skipped.append("Form already assigned to all users")
                     else:
+                        # Check if form is assigned individually to some users
+                        cursor.execute(
+                            "SELECT 1 FROM form_access WHERE form_id = %s AND user_id IS NOT NULL",
+                            (str(access_data.form_id),),
+                        )
+                        if cursor.fetchone():
+                            # Delete old individual access + notifications for that form
+                            cursor.execute(
+                                "DELETE FROM notifications WHERE form_id = %s and title='New Form Assigned'",
+                                (str(access_data.form_id),),
+                            )
+                            cursor.execute(
+                                "DELETE FROM form_access WHERE form_id = %s",
+                                (str(access_data.form_id),),
+                            )
+
+                        # Insert a single row for "all users" access
                         access_id = uuid.uuid4()
                         cursor.execute(
                             """
-                                INSERT INTO form_access 
-                                (access_id, form_id, user_id, access_type, created_at, created_by)
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                                """,
+                            INSERT INTO form_access 
+                            (access_id, form_id, user_id, access_type, created_at, created_by)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            """,
                             (
                                 str(access_id),
                                 str(access_data.form_id),
@@ -69,6 +85,7 @@ class FormAccessService:
                                 str(created_by),
                             ),
                         )
+
                         responses.append(
                             FormAccessResponse(
                                 access_id=access_id,
@@ -80,33 +97,45 @@ class FormAccessService:
                             )
                         )
 
-                        # ✅ Single broadcast notification
+                        # ✅ Notify all non-admin users
                         cursor.execute(
-                            """
-                                INSERT INTO notifications 
-                                (user_id, title, message,created_at, created_by,form_id)
-                                VALUES (
-                                    NULL,
-                                    'New Form Assigned',
-                                    %s,
-                                    %s,
-                                    %s,
-                                    %s
+                            "SELECT user_id, full_name FROM users WHERE LOWER(role) != 'admin'"
+                        )
+                        all_users = cursor.fetchall()
+
+                        if not all_users:
+                            skipped.append("No users found to assign notifications")
+                        else:
+                            for user_id, user_name in all_users:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO notifications 
+                                    (user_id, title, message, created_at, created_by, form_id)
+                                    VALUES (
+                                        %s,
+                                        'New Form Assigned',
+                                        %s,
+                                        %s,
+                                        %s,
+                                        %s
+                                    )
+                                    """,
+                                    (
+                                        str(user_id),
+                                        f"'{admin_name}' has assigned '{form_name}' form to you",
+                                        created_at,
+                                        str(created_by),
+                                        str(access_data.form_id),
+                                    ),
                                 )
-                                """,
-                            (
-                                f"'{admin_name}' has assigned '{form_name}' form to all users",
-                                created_at,
-                                str(created_by),
-                                str(access_data.form_id),
-                            ),
-                        )
-                        notifications_created.append(
-                            {
-                                "type": "all_users",
-                                "message": "Broadcast notification created for all users",
-                            }
-                        )
+                                notifications_created.append(
+                                    {
+                                        "type": "all_users_individual",
+                                        "user_id": str(user_id),
+                                        "user_name": user_name,
+                                        "message": f"Notification created for {user_name}",
+                                    }
+                                )
 
                 # ==============================
                 # CASE 2: INDIVIDUAL ACCESS
@@ -118,58 +147,69 @@ class FormAccessService:
                             detail="user_ids required for individual access",
                         )
 
-                    for user_id in access_data.user_ids:
-                        cursor.execute(
-                            "SELECT full_name FROM users WHERE user_id = %s",
-                            (str(user_id),),
+                    # If form already assigned to all users, skip individual access
+                    cursor.execute(
+                        "SELECT 1 FROM form_access WHERE form_id = %s AND user_id IS NULL",
+                        (str(access_data.form_id),),
+                    )
+                    if cursor.fetchone():
+                        skipped.append(
+                            f"Cannot assign individually. '{form_name}' is already assigned to all users"
                         )
-                        user_record = cursor.fetchone()
-                        if not user_record:
-                            skipped.append(f"User {user_id} not found")
-                            continue
+                    else:
+                        for user_id in access_data.user_ids:
+                            cursor.execute(
+                                "SELECT full_name FROM users WHERE user_id = %s",
+                                (str(user_id),),
+                            )
+                            user_record = cursor.fetchone()
+                            if not user_record:
+                                skipped.append(f"User {user_id} not found")
+                                continue
 
-                        user_name = user_record[0]
+                            user_name = user_record[0]
 
-                        cursor.execute(
-                            "SELECT 1 FROM form_access WHERE form_id = %s AND user_id = %s",
-                            (str(access_data.form_id), str(user_id)),
-                        )
-                        if cursor.fetchone():
-                            skipped.append(f"Form already assigned to {user_name}")
-                            continue
+                            cursor.execute(
+                                "SELECT 1 FROM form_access WHERE form_id = %s AND user_id = %s",
+                                (str(access_data.form_id), str(user_id)),
+                            )
+                            if cursor.fetchone():
+                                skipped.append(f"Form already assigned to {user_name}")
+                                continue
 
-                        access_id = uuid.uuid4()
-                        cursor.execute(
-                            """
+                            access_id = uuid.uuid4()
+                            cursor.execute(
+                                """
                                 INSERT INTO form_access 
                                 (access_id, form_id, user_id, access_type, created_at, created_by)
                                 VALUES (%s, %s, %s, %s, %s, %s)
                                 """,
-                            (
-                                str(access_id),
-                                str(access_data.form_id),
-                                str(user_id),
-                                access_data.access_type,
-                                created_at,
-                                str(created_by),
-                            ),
-                        )
-                        responses.append(
-                            FormAccessResponse(
-                                access_id=access_id,
-                                form_id=access_data.form_id,
-                                user_id=user_id,
-                                access_type=access_data.access_type,
-                                created_by=created_by,
-                                created_at=created_at,
+                                (
+                                    str(access_id),
+                                    str(access_data.form_id),
+                                    str(user_id),
+                                    access_data.access_type,
+                                    created_at,
+                                    str(created_by),
+                                ),
                             )
-                        )
 
-                        # ✅ Individual notification
-                        cursor.execute(
-                            """
+                            responses.append(
+                                FormAccessResponse(
+                                    access_id=access_id,
+                                    form_id=access_data.form_id,
+                                    user_id=user_id,
+                                    access_type=access_data.access_type,
+                                    created_by=created_by,
+                                    created_at=created_at,
+                                )
+                            )
+
+                            # ✅ Notification
+                            cursor.execute(
+                                """
                                 INSERT INTO notifications 
-                                (user_id, title, message, created_at, created_by,form_id) 
+                                (user_id, title, message, created_at, created_by, form_id) 
                                 VALUES (
                                     %s, 
                                     'New Form Assigned',
@@ -179,28 +219,29 @@ class FormAccessService:
                                     %s
                                 )
                                 """,
-                            (
-                                str(user_id),
-                                f"'{admin_name}' has assigned '{form_name}' form to you",
-                                created_at,
-                                str(created_by),
-                                str(access_data.form_id),
-                            ),
-                        )
-                        notifications_created.append(
-                            {
-                                "type": "individual",
-                                "user_id": str(user_id),
-                                "user_name": user_name,
-                                "message": f"Notification sent to {user_name}",
-                            }
-                        )
+                                (
+                                    str(user_id),
+                                    f"'{admin_name}' has assigned '{form_name}' form to you",
+                                    created_at,
+                                    str(created_by),
+                                    str(access_data.form_id),
+                                ),
+                            )
 
-                # conn.commit()
+                            notifications_created.append(
+                                {
+                                    "type": "individual",
+                                    "user_id": str(user_id),
+                                    "user_name": user_name,
+                                    "message": f"Notification sent to {user_name}",
+                                }
+                            )
 
             except Exception as e:
                 # conn.rollback()
                 raise e
+            finally:
+                cursor.close()
 
         return {
             "success": responses,
@@ -407,7 +448,6 @@ class FormAccessService:
 
     # get assigned form to user or supervisour
 
-
     # get assigned forms for user/supervisor with pagination
     def get_forms_for_user(self, user_id: str, page: int, limit: int):
         forms = []
@@ -422,7 +462,8 @@ class FormAccessService:
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
                     LEFT JOIN task t ON f.task_id = t.task_id
-                    WHERE  (fa.user_id = %s OR fa.user_id IS NULL)
+                    WHERE f.is_active = TRUE
+                    AND (fa.user_id = %s OR fa.user_id IS NULL)
                     """,
                     (user_id,),
                 )
@@ -435,8 +476,7 @@ class FormAccessService:
                         f.form_id, 
                         f.title, 
                         f.description, 
-                        f.created_by,
-                        u.full_name ,
+                        f.created_by, 
                         f.created_at, 
                         f.is_active,
                         f.task_id,
@@ -444,8 +484,8 @@ class FormAccessService:
                     FROM form f
                     INNER JOIN form_access fa ON f.form_id = fa.form_id
                     LEFT JOIN task t ON f.task_id = t.task_id
-                    JOIN users u ON f.created_by = u.user_id
-                    WHERE (fa.user_id = %s OR fa.user_id IS NULL)
+                    WHERE f.is_active = TRUE
+                    AND (fa.user_id = %s OR fa.user_id IS NULL)
                     ORDER BY f.created_at DESC
                     LIMIT %s OFFSET %s
                     """,
@@ -459,11 +499,11 @@ class FormAccessService:
                             "form_id": row[0],
                             "title": row[1],
                             "description": row[2],
-                            "created_by": row[4],
-                            "created_at": row[5],
-                            "is_active": row[6],
-                            "task_id": row[7],
-                            "task_title": row[8],
+                            "created_by": row[3],
+                            "created_at": row[4],
+                            "is_active": row[5],
+                            "task_id": row[6],
+                            "task_title": row[7],
                         }
                     )
 
@@ -472,3 +512,39 @@ class FormAccessService:
 
         return forms, total_count
 
+    # def get_forms_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+    #     forms = []
+
+    #     with get_db_connection(self.schema_id) as cursor:
+    #         try:
+    #             # ✅ Fetch forms with individual access OR all-user access
+    #             cursor.execute(
+    #                 """
+    #                 SELECT DISTINCT f.form_id, f.title, f.description, f.created_by, f.created_at, f.is_active
+    #                 FROM form f
+    #                 INNER JOIN form_access fa ON f.form_id = fa.form_id
+    #                 WHERE f.is_active = TRUE
+    #                 AND (
+    #                         fa.user_id = %s
+    #                         OR fa.user_id IS NULL
+    #                     )
+    #                 """,
+    #                 (user_id,),
+    #             )
+
+    #             records = cursor.fetchall()
+    #             for row in records:
+    #                 forms.append(
+    #                     {
+    #                         "form_id": row[0],
+    #                         "title": row[1],
+    #                         "description": row[2],
+    #                         "created_by": row[3],
+    #                         "created_at": row[4],
+    #                         "is_active": row[5],
+    #                     }
+    #                 )
+    #         except Exception as e:
+    #             raise e
+
+    #     return forms
