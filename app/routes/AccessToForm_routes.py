@@ -95,8 +95,8 @@ def get_my_forms(
     service = FormAccessService(schema_id)
     try:
         forms, total_count = service.get_forms_for_user(user_id, page, limit)
-        if not forms:
-            return {"message": "There are no forms available for you"}
+        # if not forms:
+        #     return {"message": "There are no forms available for you"}
         
         total_pages = (total_count + limit - 1) // limit
         return {

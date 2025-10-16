@@ -31,22 +31,21 @@ def get_unread_count(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-@notification_router.post("/mark_read")
-def mark_as_read(request: Request):
+@notification_router.post("/mark_read", response_model=MarkReadResponse)
+def mark_as_read(request_data: MarkReadRequest, request: Request):
     user_payload = request.state.user
     if not user_payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     schema_id = user_payload.get("schema_id")
-    user_id = user_payload.get("sub")  # user ID from JWT
+    user_id = user_payload.get("sub")  # ✅ user comes from JWT, not path param
 
     if not schema_id:
         raise HTTPException(status_code=400, detail="Missing schema_id in token")
 
     service = NotificationService(schema_id)
     try:
-        return service.mark_as_read(str(user_id))
+        return service.mark_as_read(str(request_data.notification_id), str(user_id))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

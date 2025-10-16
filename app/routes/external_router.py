@@ -18,7 +18,7 @@ from typing import Literal
 
 external_router = APIRouter(prefix="/external", tags=["tenants"])
 
-TEMPLATE_SCHEMA = "salaar2" # The schema to clone for new tenants
+TEMPLATE_SCHEMA = "schema_copy" # The schema to clone for new tenants
 DB_URL = os.getenv("DB_URL") # Update with your DB URL  and dont put like this in production
 print(f"Using DB_URL: {DB_URL}")
 

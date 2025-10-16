@@ -24,35 +24,35 @@ class NotificationService:
             print("DEBUG → Unread count for user:", user_id, "=", result[0])
             return NotificationCountResponse(user_id=user_id, unread_count=result[0])
 
-    def mark_as_read(self, user_id: str):
+    def mark_as_read(self, notification_id: int, user_id: str):
         with get_db_connection(self.schema_id) as cursor:
-            # cursor = conn.cursor()
             try:
-                # ✅ Update only unread notifications for this user
+                # ✅ Update only that specific notification for this user
                 cursor.execute(
                     """
                     UPDATE notifications
                     SET is_read = true
-                    WHERE user_id = %s AND is_read = false
+                    WHERE notification_id = %s AND user_id = %s
                     """,
-                    (user_id,),
+                    (notification_id, user_id),
                 )
+
                 updated_rows = cursor.rowcount  # Number of notifications updated
-                # cursor.commit()
 
                 if updated_rows > 0:
                     return {
                         "status": "success",
-                        "message": f"{updated_rows} notification(s) marked as read",
+                        "message": "Notification marked as read",
+                        "notification_id": notification_id,
                     }
                 else:
                     return {
                         "status": "info",
-                        "message": "No unread notifications found",
+                        "message": "No unread notification found for this ID and user",
+                        "notification_id": notification_id,
                     }
 
             except Exception as e:
-                # cursor.rollback()
                 raise e
             finally:
                 cursor.close()
